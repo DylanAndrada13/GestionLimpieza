@@ -1,0 +1,15 @@
+{
+  "source": "SEPA / Precios Claros, datos.gob.ar",
+  "sourceUrl": "https://datos.produccion.gob.ar/dataset/sepa-precios",
+  "snapshotDate": "2026-11-12",
+  "products": 5469,
+  "shards": 100,
+  "stats": {
+    "nestedArchives": 16,
+    "productFiles": 16,
+    "rows": 13652299,
+    "eanRows": 13499880,
+    "matchingRows": 961683
+  },
+  "license": "CC BY 4.0; atribuir a Precios Claros / Secretaría de Industria y Comercio."
+}

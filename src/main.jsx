@@ -7,6 +7,7 @@ const CATALOG_KEY = 'limpia.catalog.v1';
 const HISTORY_KEY = 'limpia.history.v1';
 const SOURCES = [
   { id: 'local', label: 'Mi catálogo', kind: 'local' },
+  { id: 'sepa-bulk', label: 'SEPA · catálogo cargado', kind: 'local' },
   { id: 'sepa', label: 'SEPA · Precios Claros', kind: 'api' },
   { id: 'ez', label: 'ez-catalog · 87 fuentes', kind: 'api', url: 'https://landing.huggian.com/ez-catalog' },
   { id: 'opf', label: 'Open Products Facts', kind: 'api' },
@@ -31,6 +32,15 @@ function normalizeProduct(raw, source) {
 }
 function productBarcodes(item) { return [...new Set([item.barcode, ...(Array.isArray(item.barcodes) ? item.barcodes : [])].filter(Boolean).map(String))]; }
 function savedProduct(code) { return readList(CATALOG_KEY).find(item => productBarcodes(item).includes(String(code))); }
+
+async function lookupSepaBulk(code) {
+  const shard = code.slice(-2);
+  const response = await fetch(`/data/sepa-cleaning/${shard}.json`, { signal: AbortSignal.timeout(2500) });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('El catálogo SEPA local no respondió');
+  const products = await response.json();
+  return products.find(product => product.barcode === code) || null;
+}
 
 async function lookupSepa(code) {
   const regions = ['NACIONAL', 'AMBA', 'CENTRO', 'CUYO', 'NEA', 'NOA', 'PATAGONIA'];
@@ -59,6 +69,15 @@ async function fetchSources(code, onSource) {
   onSource('local', local ? 'found' : 'empty', local);
   if (local) results.push(local);
   const checks = [
+    (async () => {
+      try {
+        const product = await lookupSepaBulk(code);
+        if (product) {
+          const item = normalizeProduct({ ...product, detail: `Catálogo SEPA · ${product.observations} registros de comercios` }, 'SEPA · catálogo cargado');
+          results.push(item); onSource('sepa-bulk', 'found', item);
+        } else onSource('sepa-bulk', 'empty');
+      } catch { onSource('sepa-bulk', 'error'); }
+    })(),
     (async () => {
       try {
         const lookup = await lookupSepa(code);
@@ -117,7 +136,7 @@ async function fetchSources(code, onSource) {
     })(),
   ];
   await Promise.all(checks);
-  const priority = { 'Mi catálogo': 0, 'SEPA · Precios Claros': 1, 'ez-catalog': 2, 'Open Products Facts': 3, 'UPCitemdb': 4 };
+  const priority = { 'Mi catálogo': 0, 'SEPA · catálogo cargado': 1, 'SEPA · Precios Claros': 2, 'ez-catalog': 3, 'Open Products Facts': 4, 'UPCitemdb': 5 };
   return results.sort((a, b) => (priority[a.source] ?? 9) - (priority[b.source] ?? 9));
 }
 
@@ -161,7 +180,7 @@ function App() {
     const code = tidy(value).replace(/\s/g, '');
     if (!/^\d{8,14}$/.test(code)) { setCameraError('Ingresá un código EAN o UPC de 8 a 14 números.'); return; }
     setActiveCode(code); setQuery(code); setBusy(true); setCameraError(''); setSavedMessage(''); setMatches([]);
-    setSources({ local: 'loading', sepa: 'loading', ez: 'loading', opf: 'loading', upc: 'loading', gs1: 'manual' });
+    setSources({ local: 'loading', 'sepa-bulk': 'loading', sepa: 'loading', ez: 'loading', opf: 'loading', upc: 'loading', gs1: 'manual' });
     setHistory(prev => [{ barcode: code, at: new Date().toISOString() }, ...prev.filter(row => row.barcode !== code)].slice(0, 8));
     setForm({ name: '', brand: '', quantity: '', category: '' });
     setLinkTo('');
