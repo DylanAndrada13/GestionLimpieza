@@ -272,8 +272,23 @@ function App() {
     setCameraError(''); setCameraOn(true); setZoomState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 }); setFocusMessage('Enfoque automático');
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Abrí esta página mediante HTTPS para usar la cámara.');
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader(); readerRef.current = reader;
+      const [{ BrowserMultiFormatReader, BarcodeFormat }, { DecodeHintType }] = await Promise.all([
+        import('@zxing/browser'),
+        import('@zxing/library'),
+      ]);
+      const hints = new Map([
+        [DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.ITF,
+          BarcodeFormat.CODE_39,
+        ]],
+        [DecodeHintType.TRY_HARDER, true],
+      ]);
+      const reader = new BrowserMultiFormatReader(hints); readerRef.current = reader;
       const controls = await reader.decodeFromConstraints({
         audio: false,
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -402,7 +417,7 @@ function App() {
         <div className="scan-column">
           <div className="section-heading"><div><span className="step-number">01</span><h2>Escanear producto</h2></div><span className="camera-note"><ShieldCheck size={14}/> La cámara no guarda fotos</span></div>
           <div className={`scanner ${cameraOn ? 'scanner-live' : ''}`}>
-            {cameraOn ? <><video ref={videoRef} className="camera-video" muted playsInline/><div className="scan-overlay"><span className="focus-pill">{focusMessage}</span><div className="scan-frame"><span/><span/><span/><span/><i/></div><p>Apuntá al código de barras</p>{zoomState.supported ? <label className="zoom-control"><span>Zoom <b>{zoomState.value.toFixed(1)}×</b></span><input type="range" min={zoomState.min} max={zoomState.max} step={zoomState.step} value={zoomState.value} onChange={event => changeZoom(event.target.value)}/></label> : <span className="zoom-note">El zoom depende del soporte de la cámara</span>}</div><button className="camera-close" onClick={stopCamera} aria-label="Cerrar cámara"><X size={18}/></button></> : <div className="camera-placeholder"><div className="scan-icon"><Barcode size={36} strokeWidth={1.65}/><span className="scan-rays"/></div><strong>Escaneá el código del envase</strong><span>Enfocá el código de barras dentro del cuadro</span><button className="primary-button" onClick={startCamera}><Camera size={18}/> Abrir cámara</button></div>}
+            {cameraOn ? <><video ref={videoRef} className="camera-video" muted playsInline/><div className="scan-overlay"><span className="focus-pill">{focusMessage}</span><div className="scan-frame"><span/><span/><span/><span/><i/></div><p>Apuntá al código de barras</p>{zoomState.supported ? <label className="zoom-control"><span>Zoom <b>{zoomState.value.toFixed(1)}×</b></span><input type="range" min={zoomState.min} max={zoomState.max} step={zoomState.step} value={zoomState.value} onChange={event => changeZoom(event.target.value)}/>{zoomState.value > 2 && <span className="zoom-note">Si queda borroso, probá 1–2× y alejás un poco el teléfono.</span>}</label> : <span className="zoom-note">El zoom depende del soporte de la cámara</span>}</div><button className="camera-close" onClick={stopCamera} aria-label="Cerrar cámara"><X size={18}/></button></> : <div className="camera-placeholder"><div className="scan-icon"><Barcode size={36} strokeWidth={1.65}/><span className="scan-rays"/></div><strong>Escaneá el código del envase</strong><span>Enfocá el código de barras dentro del cuadro</span><button className="primary-button" onClick={startCamera}><Camera size={18}/> Abrir cámara</button></div>}
           </div>
           <div className="manual-search"><span className="or-label">o ingresalo manualmente</span><form onSubmit={event => {event.preventDefault(); lookup(query);}}><Barcode size={19}/><input value={query} onChange={event => setQuery(event.target.value)} inputMode="numeric" placeholder="Ej. 7790001000000" aria-label="Código de barras"/><button type="submit" disabled={busy || !query}><Search size={17}/><span>Buscar</span></button></form></div>
           {cameraError && <div className="notice error-notice">{cameraError}</div>}
