@@ -1,0 +1,13 @@
+{
+  "name": "Limpia · catálogo",
+  "short_name": "Limpia",
+  "description": "Escaneo e inventario de productos de limpieza",
+  "lang": "es-AR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f5f0",
+  "theme_color": "#123a36",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
