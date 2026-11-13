@@ -29,7 +29,29 @@ function normalizeProduct(raw, source) {
     source,
   };
 }
-function savedProduct(code) { return readList(CATALOG_KEY).find(item => item.barcode === code); }
+function productBarcodes(item) { return [...new Set([item.barcode, ...(Array.isArray(item.barcodes) ? item.barcodes : [])].filter(Boolean).map(String))]; }
+function savedProduct(code) { return readList(CATALOG_KEY).find(item => productBarcodes(item).includes(String(code))); }
+
+async function lookupSepa(code) {
+  const regions = ['NACIONAL', 'AMBA', 'CENTRO', 'CUYO', 'NEA', 'NOA', 'PATAGONIA'];
+  const getRegion = async region => {
+    const response = await fetch(`https://hysmarcos.github.io/superprecios-claros/v1/sku/${encodeURIComponent(code)}/${region}.json`, { signal: AbortSignal.timeout(7000) });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`SEPA ${region} no respondió`);
+    return response.json();
+  };
+  try {
+    const national = await getRegion('NACIONAL');
+    if (national?.producto?.nombre) return { product: national, regions: ['NACIONAL'] };
+    const results = await Promise.allSettled(regions.slice(1).map(async region => ({ region, data: await getRegion(region) })));
+    const found = results.filter(result => result.status === 'fulfilled' && result.value.data?.producto?.nombre).map(result => result.value);
+    if (found.length) return { product: found[0].data, regions: found.map(result => result.region) };
+    if (results.some(result => result.status === 'rejected')) throw new Error('No se pudieron consultar todas las regiones');
+    return null;
+  } catch {
+    return { error: true };
+  }
+}
 
 async function fetchSources(code, onSource) {
   const results = [];
@@ -39,10 +61,10 @@ async function fetchSources(code, onSource) {
   const checks = [
     (async () => {
       try {
-        const res = await fetch(`https://hysmarcos.github.io/superprecios-claros/v1/sku/${encodeURIComponent(code)}/NACIONAL.json`, { signal: AbortSignal.timeout(7000) });
-        if (res.status === 404) { onSource('sepa', 'empty'); return; }
-        if (!res.ok) throw new Error('SEPA no respondió');
-        const json = await res.json();
+        const lookup = await lookupSepa(code);
+        if (lookup?.error) { onSource('sepa', 'error'); return; }
+        if (!lookup) { onSource('sepa', 'empty'); return; }
+        const json = lookup.product;
         if (json.producto?.nombre) {
           const product = json.producto;
           const item = normalizeProduct({
@@ -50,7 +72,7 @@ async function fetchSources(code, onSource) {
             name: product.nombre,
             brand: product.marca,
             quantity: [product.cantidad, product.unidad].filter(value => value !== null && value !== undefined && value !== '').join(' '),
-            detail: [json.fecha, json.precios?.length ? `${json.precios.length} cadenas` : ''].filter(Boolean).join(' · '),
+            detail: [json.fecha, lookup.regions.join('/'), json.precios?.length ? `${json.precios.length} cadenas` : ''].filter(Boolean).join(' · '),
           }, 'SEPA · Precios Claros');
           results.push(item); onSource('sepa', 'found', item);
         } else onSource('sepa', 'empty');
@@ -113,6 +135,9 @@ function App() {
   const [form, setForm] = useState({ name: '', brand: '', quantity: '', category: '' });
   const [savedMessage, setSavedMessage] = useState('');
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [linkTo, setLinkTo] = useState('');
+  const [zoomState, setZoomState] = useState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
+  const [focusMessage, setFocusMessage] = useState('Enfoque automático');
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const stopRef = useRef(null);
@@ -130,7 +155,7 @@ function App() {
 
   const catalogCount = catalog.length;
   const searchedCount = history.length;
-  const currentSaved = useMemo(() => activeCode ? catalog.find(item => item.barcode === activeCode) : null, [catalog, activeCode]);
+  const currentSaved = useMemo(() => activeCode ? catalog.find(item => productBarcodes(item).includes(activeCode)) : null, [catalog, activeCode]);
 
   const lookup = useCallback(async (value) => {
     const code = tidy(value).replace(/\s/g, '');
@@ -139,6 +164,7 @@ function App() {
     setSources({ local: 'loading', sepa: 'loading', ez: 'loading', opf: 'loading', upc: 'loading', gs1: 'manual' });
     setHistory(prev => [{ barcode: code, at: new Date().toISOString() }, ...prev.filter(row => row.barcode !== code)].slice(0, 8));
     setForm({ name: '', brand: '', quantity: '', category: '' });
+    setLinkTo('');
     const found = await fetchSources(code, (id, status, item) => setSources(prev => ({ ...prev, [id]: status })));
     setMatches(found);
     const best = found.find(item => item.name);
@@ -147,35 +173,69 @@ function App() {
   }, []);
 
   async function startCamera() {
-    setCameraError(''); setCameraOn(true);
+    setCameraError(''); setCameraOn(true); setZoomState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 }); setFocusMessage('Enfoque automático');
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Abrí esta página mediante HTTPS para usar la cámara.');
       const { BrowserMultiFormatReader } = await import('@zxing/browser');
       const reader = new BrowserMultiFormatReader(); readerRef.current = reader;
-      const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+      const controls = await reader.decodeFromConstraints({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      }, videoRef.current, (result) => {
         if (result) {
           const code = result.getText();
           if (seenRef.current !== code) { seenRef.current = code; stopCamera(); lookup(code); }
         }
       });
       stopRef.current = controls;
+      const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+      const capabilities = track?.getCapabilities?.();
+      const focusModes = capabilities?.focusMode;
+      if (Array.isArray(focusModes) && focusModes.includes('continuous')) {
+        try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); setFocusMessage('Autofocus continuo'); } catch { setFocusMessage('Enfoque automático del teléfono'); }
+      }
+      const zoom = capabilities?.zoom;
+      if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max) && zoom.max > zoom.min) {
+        const current = track.getSettings?.().zoom ?? zoom.min;
+        setZoomState({ supported: true, min: zoom.min, max: zoom.max, step: zoom.step || 0.1, value: Math.min(zoom.max, Math.max(zoom.min, current)) });
+      }
     } catch (error) {
       setCameraOn(false);
       setCameraError(error?.name === 'NotAllowedError' ? 'Permití el acceso a la cámara en el navegador para escanear.' : (error?.message || 'No se pudo iniciar la cámara.'));
     }
   }
+  async function changeZoom(value) {
+    const next = Number(value);
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: next }] });
+      setZoomState(current => ({ ...current, value: next }));
+    } catch { setCameraError('Este teléfono no permite cambiar el zoom desde el navegador.'); }
+  }
   function stopCamera() {
     try { stopRef.current?.stop(); } catch { }
     try { readerRef.current?.reset(); } catch { }
     if (videoRef.current?.srcObject) videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    stopRef.current = null; setCameraOn(false); seenRef.current = '';
+    stopRef.current = null; setCameraOn(false); seenRef.current = ''; setZoomState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
   }
   function saveProduct(event) {
     event.preventDefault();
-    if (!activeCode || !form.name.trim()) return;
-    const prev = readList(CATALOG_KEY).filter(item => item.barcode !== activeCode);
-    const item = { barcode: activeCode, name: tidy(form.name), brand: tidy(form.brand), quantity: tidy(form.quantity), category: tidy(form.category), image: matches.find(m => m.image)?.image || '', source: 'Mi catálogo' };
-    const next = [item, ...prev]; setCatalog(next); setMatches([item]); setSavedMessage('Producto guardado en este dispositivo.');
+    if (!activeCode) return;
+    const existing = readList(CATALOG_KEY);
+    if (linkTo) {
+      const linked = existing.find(item => item.barcode === linkTo);
+      if (!linked) return;
+      const next = existing.map(item => item.barcode === linkTo ? { ...item, barcodes: [...new Set([...productBarcodes(item), activeCode])] } : item);
+      const updated = next.find(item => item.barcode === linkTo);
+      setCatalog(next); setMatches([updated]); setSources(current => ({ ...current, local: 'found' }));
+      setSavedMessage(`Código ${activeCode} asociado a ${updated.name}.`);
+      return;
+    }
+    if (!form.name.trim()) return;
+    const prev = existing.filter(item => !productBarcodes(item).includes(activeCode));
+    const item = { barcode: activeCode, barcodes: [activeCode], name: tidy(form.name), brand: tidy(form.brand), quantity: tidy(form.quantity), category: tidy(form.category), image: matches.find(m => m.image)?.image || '', source: 'Mi catálogo' };
+    const next = [item, ...prev]; setCatalog(next); setMatches([item]); setSources(current => ({ ...current, local: 'found' })); setSavedMessage('Producto guardado en este dispositivo.');
   }
   async function install() { if (!installPrompt) { setShowInstallHelp(true); return; } await installPrompt.prompt(); setInstallPrompt(null); }
   function sourceState(id) {
@@ -207,7 +267,7 @@ function App() {
         <div className="scan-column">
           <div className="section-heading"><div><span className="step-number">01</span><h2>Escanear producto</h2></div><span className="camera-note"><ShieldCheck size={14}/> La cámara no guarda fotos</span></div>
           <div className={`scanner ${cameraOn ? 'scanner-live' : ''}`}>
-            {cameraOn ? <><video ref={videoRef} className="camera-video" muted playsInline/><div className="scan-overlay"><div className="scan-frame"><span/><span/><span/><span/><i/></div><p>Apuntá al código de barras</p></div><button className="camera-close" onClick={stopCamera} aria-label="Cerrar cámara"><X size={18}/></button></> : <div className="camera-placeholder"><div className="scan-icon"><Barcode size={36} strokeWidth={1.65}/><span className="scan-rays"/></div><strong>Escaneá el código del envase</strong><span>Enfocá el código de barras dentro del cuadro</span><button className="primary-button" onClick={startCamera}><Camera size={18}/> Abrir cámara</button></div>}
+            {cameraOn ? <><video ref={videoRef} className="camera-video" muted playsInline/><div className="scan-overlay"><span className="focus-pill">{focusMessage}</span><div className="scan-frame"><span/><span/><span/><span/><i/></div><p>Apuntá al código de barras</p>{zoomState.supported ? <label className="zoom-control"><span>Zoom <b>{zoomState.value.toFixed(1)}×</b></span><input type="range" min={zoomState.min} max={zoomState.max} step={zoomState.step} value={zoomState.value} onChange={event => changeZoom(event.target.value)}/></label> : <span className="zoom-note">El zoom depende del soporte de la cámara</span>}</div><button className="camera-close" onClick={stopCamera} aria-label="Cerrar cámara"><X size={18}/></button></> : <div className="camera-placeholder"><div className="scan-icon"><Barcode size={36} strokeWidth={1.65}/><span className="scan-rays"/></div><strong>Escaneá el código del envase</strong><span>Enfocá el código de barras dentro del cuadro</span><button className="primary-button" onClick={startCamera}><Camera size={18}/> Abrir cámara</button></div>}
           </div>
           <div className="manual-search"><span className="or-label">o ingresalo manualmente</span><form onSubmit={event => {event.preventDefault(); lookup(query);}}><Barcode size={19}/><input value={query} onChange={event => setQuery(event.target.value)} inputMode="numeric" placeholder="Ej. 7790001000000" aria-label="Código de barras"/><button type="submit" disabled={busy || !query}><Search size={17}/><span>Buscar</span></button></form></div>
           {cameraError && <div className="notice error-notice">{cameraError}</div>}
@@ -220,13 +280,13 @@ function App() {
               <div className="product-head"><div className="product-icon"><PackagePlus size={22}/></div><div className="product-code"><span>CÓDIGO LEÍDO</span><strong>{activeCode}</strong></div><span className={`lookup-badge ${matches.some(item => item.name) ? 'badge-found' : ''}`}>{busy ? 'Buscando' : matches.some(item => item.name) ? 'Encontrado' : 'Sin ficha'}</span></div>
               {matches.find(item => item.name) && <div className="matched-product">{matches.find(item => item.image) ? <img src={matches.find(item => item.image).image} alt="Producto encontrado"/> : <div className="product-placeholder"><PackagePlus size={26}/></div>}<div><strong>{matches.find(item => item.name).name}</strong><span>{[matches.find(item => item.brand)?.brand, matches.find(item => item.quantity)?.quantity, matches.find(item => item.detail)?.detail].filter(Boolean).join(' · ') || 'Completá los datos que falten'}</span></div><Check size={19}/></div>}
               <div className="sources-list"><div className="sources-header"><span>CONSULTA DE FUENTES</span><span>ESTADO</span></div>{SOURCES.map(source => <div className="source-row" key={source.id}><span className={`source-pip ${source.id}`}/><span className="source-label">{source.label}</span>{source.id === 'gs1' ? <a className="source-action" href={source.url} target="_blank" rel="noreferrer">Consultar <ExternalLink size={13}/></a> : source.id === 'ez' && sources.ez === 'not_configured' ? <a className="source-action" href={source.url} target="_blank" rel="noreferrer">Pedir API key <ExternalLink size={13}/></a> : <span className={`source-status ${sources[source.id] === 'found' ? 'status-green' : ''}`}>{sourceState(source.id)}</span>}</div>)}</div>
-              {!currentSaved && <form className="product-form" onSubmit={saveProduct}><div className="form-title"><span>{matches.some(item => item.name) ? 'Guardar en mi catálogo' : 'No encontramos este código'}</span><span>Se guarda en este teléfono</span></div><label>Nombre del producto<input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ej. Detergente limón"/></label><div className="form-grid"><label>Marca<input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} placeholder="Marca"/></label><label>Contenido<input value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} placeholder="750 ml"/></label></div><button className="save-button" type="submit"><Plus size={17}/>{matches.some(item => item.name) ? 'Guardar producto' : 'Agregar al catálogo'}</button>{savedMessage && <div className="saved-message"><Check size={15}/>{savedMessage}</div>}</form>}
+              {!currentSaved && <form className="product-form" onSubmit={saveProduct}><div className="form-title"><span>{linkTo ? 'Asociar otro código' : matches.some(item => item.name) ? 'Guardar en mi catálogo' : 'No encontramos este código'}</span><span>Se guarda en este teléfono</span></div>{catalog.length > 0 && <label>¿Ya existe este producto?<select value={linkTo} onChange={event => setLinkTo(event.target.value)}><option value="">Crear una ficha nueva</option>{catalog.map(item => <option key={item.barcode} value={item.barcode}>{[item.name, item.brand, item.quantity].filter(Boolean).join(' · ')}</option>)}</select></label>}{linkTo ? <p className="link-explanation">El código {activeCode} quedará vinculado a la ficha seleccionada. Los próximos escaneos abrirán ese mismo producto.</p> : <><label>Nombre del producto<input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ej. Detergente limón"/></label><div className="form-grid"><label>Marca<input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} placeholder="Marca"/></label><label>Contenido<input value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} placeholder="750 ml"/></label></div></>}<button className="save-button" type="submit"><Plus size={17}/>{linkTo ? 'Asociar código a esta ficha' : matches.some(item => item.name) ? 'Guardar producto' : 'Agregar al catálogo'}</button>{savedMessage && <div className="saved-message"><Check size={15}/>{savedMessage}</div>}</form>}
             </>}
           </div>
           <div className="source-footnote"><ShieldCheck size={15}/><span>Las fuentes pueden tener datos incompletos. Confirmá el envase antes de guardar.</span></div>
         </div>
       </section>
-      <section className="recent"><div className="recent-heading"><h2><History size={17}/> Escaneos recientes</h2><span>EN ESTE TELÉFONO</span></div>{history.length ? <div className="history-list">{history.slice(0,4).map(row => <button className="history-item" key={row.barcode} onClick={() => lookup(row.barcode)}><Barcode size={18}/><span>{row.barcode}</span><span className="history-name">{catalog.find(item => item.barcode === row.barcode)?.name || 'Buscar de nuevo'}</span><ExternalLink size={14}/></button>)}</div> : <p className="history-empty">Tus últimos códigos aparecerán acá.</p>}</section>
+      <section className="recent"><div className="recent-heading"><h2><History size={17}/> Escaneos recientes</h2><span>EN ESTE TELÉFONO</span></div>{history.length ? <div className="history-list">{history.slice(0,4).map(row => <button className="history-item" key={row.barcode} onClick={() => lookup(row.barcode)}><Barcode size={18}/><span>{row.barcode}</span><span className="history-name">{catalog.find(item => productBarcodes(item).includes(row.barcode))?.name || 'Buscar de nuevo'}</span><ExternalLink size={14}/></button>)}</div> : <p className="history-empty">Tus últimos códigos aparecerán acá.</p>}</section>
       <footer><span>limpia<span className="brand-dot">.</span> <span className="footer-tagline">Una lista más clara para el día a día.</span></span><span className="connection"><i/> PWA · Catálogo local</span></footer>
     </main>
     {showInstallHelp && <div className="modal-backdrop" onClick={() => setShowInstallHelp(false)}><section className="install-dialog" role="dialog" aria-modal="true" aria-labelledby="install-title" onClick={event => event.stopPropagation()}><button className="dialog-close" onClick={() => setShowInstallHelp(false)} aria-label="Cerrar"><X size={18}/></button><div className="dialog-icon"><Sparkles size={22}/></div><h2 id="install-title">Llevá Limpia al teléfono</h2><p>Instalala desde el navegador para abrirla como una app y tener el catálogo a mano.</p><div className="install-steps"><strong>En iPhone</strong><span>En Safari, tocá <b>Compartir</b> y elegí <b>Agregar a pantalla de inicio</b>.</span><strong>En Android</strong><span>En Chrome, abrí el menú ⋮ y tocá <b>Instalar aplicación</b> o <b>Agregar a pantalla principal</b>.</span></div><button className="save-button" onClick={() => setShowInstallHelp(false)}>Entendido</button></section></div>}
