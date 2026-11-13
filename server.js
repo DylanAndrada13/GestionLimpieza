@@ -1,12 +1,18 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { lookupEzCatalog } from './lib/ez-catalog.js';
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4173);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '10kb' }));
+
+app.get('/api/ez-catalog/lookup', async (req, res) => {
+  const result = await lookupEzCatalog(req.query.code);
+  res.status(result.status).set('Cache-Control', 'no-store').json(result.body);
+});
 
 app.post('/api/upcitemdb/lookup', async (req, res) => {
   const code = String(req.body?.upc || '').replace(/\s/g, '');

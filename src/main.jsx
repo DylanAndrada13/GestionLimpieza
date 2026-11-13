@@ -7,6 +7,8 @@ const CATALOG_KEY = 'limpia.catalog.v1';
 const HISTORY_KEY = 'limpia.history.v1';
 const SOURCES = [
   { id: 'local', label: 'Mi catálogo', kind: 'local' },
+  { id: 'sepa', label: 'SEPA · Precios Claros', kind: 'api' },
+  { id: 'ez', label: 'ez-catalog · 87 fuentes', kind: 'api', url: 'https://landing.huggian.com/ez-catalog' },
   { id: 'opf', label: 'Open Products Facts', kind: 'api' },
   { id: 'upc', label: 'UPCitemdb', kind: 'api' },
   { id: 'gs1', label: 'GS1 Argentina', kind: 'manual', url: 'https://www.gs1.org.ar/Site/Servicios_Bootstrap5/VerifiedGO.html' },
@@ -22,6 +24,8 @@ function normalizeProduct(raw, source) {
     quantity: tidy(raw.quantity || raw.size || raw.net_content),
     image: raw.image || raw.image_url || '',
     category: tidy(raw.category || raw.categories),
+    verified: Boolean(raw.verified),
+    detail: tidy(raw.detail),
     source,
   };
 }
@@ -33,6 +37,37 @@ async function fetchSources(code, onSource) {
   onSource('local', local ? 'found' : 'empty', local);
   if (local) results.push(local);
   const checks = [
+    (async () => {
+      try {
+        const res = await fetch(`https://hysmarcos.github.io/superprecios-claros/v1/sku/${encodeURIComponent(code)}/NACIONAL.json`, { signal: AbortSignal.timeout(7000) });
+        if (res.status === 404) { onSource('sepa', 'empty'); return; }
+        if (!res.ok) throw new Error('SEPA no respondió');
+        const json = await res.json();
+        if (json.producto?.nombre) {
+          const product = json.producto;
+          const item = normalizeProduct({
+            barcode: json.ean || code,
+            name: product.nombre,
+            brand: product.marca,
+            quantity: [product.cantidad, product.unidad].filter(value => value !== null && value !== undefined && value !== '').join(' '),
+            detail: [json.fecha, json.precios?.length ? `${json.precios.length} cadenas` : ''].filter(Boolean).join(' · '),
+          }, 'SEPA · Precios Claros');
+          results.push(item); onSource('sepa', 'found', item);
+        } else onSource('sepa', 'empty');
+      } catch { onSource('sepa', 'error'); }
+    })(),
+    (async () => {
+      try {
+        const res = await fetch(`/api/ez-catalog/lookup?code=${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error('ez-catalog no respondió');
+        const json = await res.json();
+        if (json.status === 'found' && json.product) {
+          const product = json.product;
+          const item = normalizeProduct({ barcode: product.barcode || code, name: product.name, brand: product.brand, quantity: product.presentation, image: product.image_url, category: product.category_name || product.subcategory, verified: product.verified, detail: product.verified ? 'Ficha verificada' : '' }, 'ez-catalog');
+          results.push(item); onSource('ez', 'found', item);
+        } else onSource('ez', json.status || (json.configured === false ? 'not_configured' : 'empty'));
+      } catch { onSource('ez', 'error'); }
+    })(),
     (async () => {
       try {
         const res = await fetch(`https://world.openproductsfacts.org/api/v3/product/${encodeURIComponent(code)}.json?fields=code,product_name,brands,quantity,image_url,categories`, { signal: AbortSignal.timeout(9000) });
@@ -60,7 +95,8 @@ async function fetchSources(code, onSource) {
     })(),
   ];
   await Promise.all(checks);
-  return results;
+  const priority = { 'Mi catálogo': 0, 'SEPA · Precios Claros': 1, 'ez-catalog': 2, 'Open Products Facts': 3, 'UPCitemdb': 4 };
+  return results.sort((a, b) => (priority[a.source] ?? 9) - (priority[b.source] ?? 9));
 }
 
 function App() {
@@ -100,7 +136,7 @@ function App() {
     const code = tidy(value).replace(/\s/g, '');
     if (!/^\d{8,14}$/.test(code)) { setCameraError('Ingresá un código EAN o UPC de 8 a 14 números.'); return; }
     setActiveCode(code); setQuery(code); setBusy(true); setCameraError(''); setSavedMessage(''); setMatches([]);
-    setSources({ local: 'loading', opf: 'loading', upc: 'loading', gs1: 'manual' });
+    setSources({ local: 'loading', sepa: 'loading', ez: 'loading', opf: 'loading', upc: 'loading', gs1: 'manual' });
     setHistory(prev => [{ barcode: code, at: new Date().toISOString() }, ...prev.filter(row => row.barcode !== code)].slice(0, 8));
     setForm({ name: '', brand: '', quantity: '', category: '' });
     const found = await fetchSources(code, (id, status, item) => setSources(prev => ({ ...prev, [id]: status })));
@@ -148,6 +184,9 @@ function App() {
     if (status === 'found') return 'Encontrado';
     if (status === 'empty') return 'Sin resultado';
     if (status === 'error') return 'No respondió';
+    if (status === 'not_configured') return 'Requiere API key';
+    if (status === 'auth_error') return 'Revisar API key';
+    if (status === 'rate_limited') return 'Límite alcanzado';
     if (status === 'manual') return 'Consulta pública';
     return '—';
   }
@@ -177,10 +216,10 @@ function App() {
         <div className="result-column">
           <div className="section-heading result-title"><div><span className="step-number">02</span><h2>Ficha del producto</h2></div><span className="live-indicator"><span/> EN VIVO</span></div>
           <div className="result-card">
-            {!activeCode ? <div className="empty-result"><div className="empty-illustration"><Barcode size={27}/><Search size={16}/></div><strong>Acá aparece el producto</strong><p>Escaneá un código para consultar las fuentes disponibles.</p><div className="source-mini"><span>Fuentes automáticas</span><b>2 externas + catálogo local</b></div></div> : <>
+            {!activeCode ? <div className="empty-result"><div className="empty-illustration"><Barcode size={27}/><Search size={16}/></div><strong>Acá aparece el producto</strong><p>Escaneá un código para consultar las fuentes disponibles.</p><div className="source-mini"><span>Fuentes automáticas</span><b>SEPA Argentina + bases globales</b></div></div> : <>
               <div className="product-head"><div className="product-icon"><PackagePlus size={22}/></div><div className="product-code"><span>CÓDIGO LEÍDO</span><strong>{activeCode}</strong></div><span className={`lookup-badge ${matches.some(item => item.name) ? 'badge-found' : ''}`}>{busy ? 'Buscando' : matches.some(item => item.name) ? 'Encontrado' : 'Sin ficha'}</span></div>
-              {matches.find(item => item.name) && <div className="matched-product">{matches.find(item => item.image) ? <img src={matches.find(item => item.image).image} alt="Producto encontrado"/> : <div className="product-placeholder"><PackagePlus size={26}/></div>}<div><strong>{matches.find(item => item.name).name}</strong><span>{[matches.find(item => item.brand)?.brand, matches.find(item => item.quantity)?.quantity].filter(Boolean).join(' · ') || 'Completá los datos que falten'}</span></div><Check size={19}/></div>}
-              <div className="sources-list"><div className="sources-header"><span>CONSULTA DE FUENTES</span><span>ESTADO</span></div>{SOURCES.map(source => <div className="source-row" key={source.id}><span className={`source-pip ${source.id}`}/><span className="source-label">{source.label}</span>{source.id === 'gs1' ? <a className="source-action" href={source.url} target="_blank" rel="noreferrer">Consultar <ExternalLink size={13}/></a> : <span className={`source-status ${sources[source.id] === 'found' ? 'status-green' : ''}`}>{sourceState(source.id)}</span>}</div>)}</div>
+              {matches.find(item => item.name) && <div className="matched-product">{matches.find(item => item.image) ? <img src={matches.find(item => item.image).image} alt="Producto encontrado"/> : <div className="product-placeholder"><PackagePlus size={26}/></div>}<div><strong>{matches.find(item => item.name).name}</strong><span>{[matches.find(item => item.brand)?.brand, matches.find(item => item.quantity)?.quantity, matches.find(item => item.detail)?.detail].filter(Boolean).join(' · ') || 'Completá los datos que falten'}</span></div><Check size={19}/></div>}
+              <div className="sources-list"><div className="sources-header"><span>CONSULTA DE FUENTES</span><span>ESTADO</span></div>{SOURCES.map(source => <div className="source-row" key={source.id}><span className={`source-pip ${source.id}`}/><span className="source-label">{source.label}</span>{source.id === 'gs1' ? <a className="source-action" href={source.url} target="_blank" rel="noreferrer">Consultar <ExternalLink size={13}/></a> : source.id === 'ez' && sources.ez === 'not_configured' ? <a className="source-action" href={source.url} target="_blank" rel="noreferrer">Pedir API key <ExternalLink size={13}/></a> : <span className={`source-status ${sources[source.id] === 'found' ? 'status-green' : ''}`}>{sourceState(source.id)}</span>}</div>)}</div>
               {!currentSaved && <form className="product-form" onSubmit={saveProduct}><div className="form-title"><span>{matches.some(item => item.name) ? 'Guardar en mi catálogo' : 'No encontramos este código'}</span><span>Se guarda en este teléfono</span></div><label>Nombre del producto<input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ej. Detergente limón"/></label><div className="form-grid"><label>Marca<input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} placeholder="Marca"/></label><label>Contenido<input value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} placeholder="750 ml"/></label></div><button className="save-button" type="submit"><Plus size={17}/>{matches.some(item => item.name) ? 'Guardar producto' : 'Agregar al catálogo'}</button>{savedMessage && <div className="saved-message"><Check size={15}/>{savedMessage}</div>}</form>}
             </>}
           </div>
