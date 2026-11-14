@@ -256,12 +256,21 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
   );
 }
 
-function Toast({ toast }) {
+function Toast({ toast, onAction }) {
   if (!toast) return null;
+  const type = toast.type || 'success';
+  const Icon = type === 'error' ? Info : type === 'cart' ? CheckCircle2 : Check;
   return (
-    <div className={`toast ${toast.type || 'success'}`} role="status">
-      {toast.type === 'error' ? <Info size={18} /> : <Check size={18} />}
-      <span>{toast.message}</span>
+    <div key={toast.id} className={`toast ${type}`} role="status">
+      <span className="toast-icon"><Icon size={type === 'cart' ? 22 : 18} strokeWidth={2.4} /></span>
+      <span className="toast-copy">
+        {toast.title && <strong>{toast.title}</strong>}
+        <span>{toast.message}</span>
+      </span>
+      {toast.action && (
+        <button type="button" className="toast-action" onClick={onAction}>{toast.action}</button>
+      )}
+      {type === 'cart' && <span className="toast-life" aria-hidden="true" />}
     </div>
   );
 }
@@ -391,7 +400,7 @@ function LoadingProduct({ barcode }) {
   );
 }
 
-function NotFoundProduct({ barcode, onAddInventory, onScanAgain }) {
+function NotFoundProduct({ barcode, cart, cartTotal, onAddInventory, onScanAgain, onFinalize }) {
   return (
     <section className="not-found">
       <div className="not-found-mark">
@@ -401,48 +410,77 @@ function NotFoundProduct({ barcode, onAddInventory, onScanAgain }) {
       <span className="code-eyebrow">CÓDIGO {barcode}</span>
       <h1>NO SE ENCONTRÓ<br />EL PRODUCTO</h1>
       <p>No figura en tu inventario ni en las fuentes consultadas. Cargalo una vez y quedará reconocido para la próxima.</p>
-      <button type="button" className="primary-cta" onClick={onAddInventory}>
-        <PackagePlus size={19} /> AÑADIR AL INVENTARIO
-      </button>
-      <button type="button" className="secondary-cta" onClick={onScanAgain}>
-        <Camera size={18} /> SEGUIR ESCANEANDO
-      </button>
+      <div className="not-found-actions">
+        <button type="button" className="primary-cta" onClick={onAddInventory}>
+          <PackagePlus size={19} /> AÑADIR AL INVENTARIO
+        </button>
+        <div className="product-actions-row">
+          <ScanNextButton onClick={onScanAgain} />
+          <FinalizeButton cart={cart} total={cartTotal} onFinalize={onFinalize} />
+        </div>
+      </div>
     </section>
   );
 }
 
-function PurchasePreview({ cart, total, onDetail, onFinalize }) {
-  const visible = cart.slice(0, 3);
+function ScanNextButton({ onClick }) {
   return (
-    <section className="purchase-preview">
-      <div className="purchase-heading">
-        <h2><ShoppingCart size={19} /> Tu compra</h2>
-        <button type="button" onClick={onDetail}>Ver detalle <ArrowRight size={15} /></button>
-      </div>
-      <div className="preview-items">
-        {visible.map(item => (
-          <div className="preview-item" key={item.barcode}>
-            <ProductThumb src={item.image} name={item.name} className="tiny" iconSize={18} />
-            <span className="preview-name">{item.name || 'Producto'}</span>
-            <span className="preview-qty">x{item.qty}</span>
-            <strong>{priceLabel(item.price * item.qty)}</strong>
-          </div>
-        ))}
-        {cart.length > 3 && <p className="more-items">y {cart.length - 3} producto{cart.length - 3 === 1 ? '' : 's'} más</p>}
-      </div>
-      <div className="total-row">
-        <span>Total:</span>
-        <strong>{money(total)}</strong>
-      </div>
-      <button type="button" className="primary-cta finalize" onClick={onFinalize}>
-        <CheckCircle2 size={19} /> Finalizar compra
-      </button>
-    </section>
+    <button type="button" className="next-product-cta" onClick={onClick}>
+      <Camera size={17} /> Siguiente producto
+    </button>
   );
 }
 
-function FoundProduct({ product, busy, onAdd, onEditInventory, canEdit }) {
+function FinalizeButton({ cart, total, onFinalize, wide = false }) {
+  const [confirming, setConfirming] = useState(false);
+  const units = cartUnits(cart);
+  const disabled = !cart.length;
+  return (
+    <>
+      <button
+        type="button"
+        className={`finalize-cta ${wide ? 'is-wide' : ''}`}
+        onClick={() => setConfirming(true)}
+        disabled={disabled}
+      >
+        <span className="finalize-icon"><CheckCircle2 size={19} strokeWidth={2.2} /></span>
+        <span className="finalize-copy">
+          <strong>Finalizar compra</strong>
+          <small>{disabled ? 'Sin productos' : `${units} unidad${units === 1 ? '' : 'es'} · ${money(total)}`}</small>
+        </span>
+      </button>
+
+      {confirming && (
+        <div className="modal-backdrop" onClick={() => setConfirming(false)}>
+          <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="finalize-title" onClick={event => event.stopPropagation()}>
+            <div className="confirm-icon finalize"><CheckCircle2 size={25} /></div>
+            <h2 id="finalize-title">¿Finalizar la compra?</h2>
+            <p>
+              {cart.length} producto{cart.length === 1 ? '' : 's'} · {units} unidad{units === 1 ? '' : 'es'} · total {money(total)}.
+              {' '}Se va a descontar el stock del inventario.
+            </p>
+            <div className="confirm-actions">
+              <button type="button" className="secondary-cta compact" onClick={() => setConfirming(false)}>Cancelar</button>
+              <button type="button" className="finalize-confirm" onClick={() => { setConfirming(false); onFinalize(); }}>Finalizar compra</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+function FoundProduct({ product, busy, cart, cartTotal, onAdd, onScanAgain, onFinalize, onEditInventory, canEdit }) {
   const stock = Number(product.stock) || 0;
+  const [qty, setQty] = useState(1);
+  const maxQty = product.inInventory && stock > 0 ? stock : 999;
+  const unitPrice = Number(product.price) || 0;
+  const subtotal = unitPrice * qty;
+
+  useEffect(() => { setQty(1); }, [product.barcode]);
+
+  const changeQty = (delta) => setQty(value => Math.min(maxQty, Math.max(1, value + delta)));
+
   return (
     <>
       <section className="product-summary">
@@ -479,9 +517,28 @@ function FoundProduct({ product, busy, onAdd, onEditInventory, canEdit }) {
         </span>
       </div>
 
-      <button type="button" className="primary-cta add-to-cart" onClick={onAdd}>
-        <span className="cta-plus"><Plus size={17} strokeWidth={2.8} /></span> Agregar a la compra
-      </button>
+      <div className="qty-picker">
+        <span className="qty-picker-icon"><ShoppingCart size={21} strokeWidth={1.8} /></span>
+        <span className="qty-picker-copy">
+          <span>Cantidad</span>
+          <strong>{unitPrice > 0 ? `Subtotal ${money(subtotal)}` : 'Unidades a llevar'}</strong>
+        </span>
+        <div className="qty-stepper" aria-label="Cantidad de unidades">
+          <button type="button" onClick={() => changeQty(-1)} disabled={qty <= 1} aria-label="Restar una unidad"><Minus size={16} /></button>
+          <strong>{qty}</strong>
+          <button type="button" onClick={() => changeQty(1)} disabled={qty >= maxQty} aria-label="Sumar una unidad"><Plus size={16} /></button>
+        </div>
+      </div>
+
+      <div className="product-actions">
+        <button type="button" className="primary-cta add-to-cart" onClick={() => onAdd(qty)}>
+          <span className="cta-plus"><Plus size={17} strokeWidth={2.8} /></span> Agregar a la compra
+        </button>
+        <div className="product-actions-row">
+          <ScanNextButton onClick={onScanAgain} />
+          <FinalizeButton cart={cart} total={cartTotal} onFinalize={onFinalize} />
+        </div>
+      </div>
 
       {!product.inInventory && (
         <button type="button" className="inventory-hint" onClick={onEditInventory}>
@@ -503,7 +560,6 @@ function ProductScreen({
   onAddInventory,
   onEditInventory,
   onAddToCart,
-  onCartDetail,
   onFinalize,
 }) {
   const loading = busy && !product?.name;
@@ -520,20 +576,22 @@ function ProductScreen({
         <FoundProduct
           product={product}
           busy={busy}
+          cart={cart}
+          cartTotal={cartTotal}
           onAdd={onAddToCart}
+          onScanAgain={onScanAgain}
+          onFinalize={onFinalize}
           onEditInventory={onEditInventory}
           canEdit
         />
       )}
       {!loading && !found && (
-        <NotFoundProduct barcode={barcode} onAddInventory={onAddInventory} onScanAgain={onScanAgain} />
-      )}
-
-      {cart.length > 0 && (
-        <PurchasePreview
+        <NotFoundProduct
+          barcode={barcode}
           cart={cart}
-          total={cartTotal}
-          onDetail={onCartDetail}
+          cartTotal={cartTotal}
+          onAddInventory={onAddInventory}
+          onScanAgain={onScanAgain}
           onFinalize={onFinalize}
         />
       )}
@@ -583,9 +641,7 @@ function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFina
             <div><span>Productos</span><strong>{cart.length}</strong></div>
             <div><span>Unidades</span><strong>{units}</strong></div>
             <div className="cart-total"><span>Total</span><strong>{money(total)}</strong></div>
-            <button type="button" className="primary-cta finalize" onClick={onFinalize}>
-              <CheckCircle2 size={19} /> Finalizar compra
-            </button>
+            <FinalizeButton cart={cart} total={total} onFinalize={onFinalize} wide />
             <button type="button" className="secondary-cta compact" onClick={onScan}>
               <Camera size={17} /> Seguir escaneando
             </button>
@@ -596,7 +652,7 @@ function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFina
   );
 }
 
-function PurchasesScreen({ purchases, onBack }) {
+function PurchasesScreen({ purchases, onBack, onScan }) {
   const [openId, setOpenId] = useState('');
   const today = purchases.filter(purchase => sameDay(purchase.at));
   const todayTotal = today.reduce((sum, purchase) => sum + (Number(purchase.total) || 0), 0);
@@ -608,6 +664,9 @@ function PurchasesScreen({ purchases, onBack }) {
         onBack={onBack}
         action={today.length > 0 ? <span className="today-pill">Hoy · {money(todayTotal)}</span> : null}
       />
+      <button type="button" className="scan-again-cta" onClick={onScan}>
+        <Camera size={18} /> Escanear siguiente producto
+      </button>
       {purchases.length === 0 ? (
         <EmptyState icon={ShoppingCart} title="Todavía no hay compras" text="Cuando finalices una compra, va a quedar registrada acá y el stock se va a descontar." />
       ) : (
@@ -1148,9 +1207,11 @@ export default function App() {
   const inventoryItem = inventoryDraft ? findLocalProduct(catalog, inventoryDraft.barcode) : null;
 
   const showToast = useCallback((message, type = 'success') => {
+    const payload = typeof message === 'string' ? { message, type } : { type: 'success', ...message };
     clearTimeout(toastTimerRef.current);
-    setToast({ message, type, id: Date.now() });
-    toastTimerRef.current = setTimeout(() => setToast(null), 3400);
+    setToast({ ...payload, id: `${Date.now()}-${Math.random().toString(16).slice(2)}` });
+    const duration = payload.type === 'cart' ? 5200 : payload.type === 'error' ? 4200 : 3600;
+    toastTimerRef.current = setTimeout(() => setToast(null), duration);
   }, []);
 
   const addHistory = useCallback((entry) => {
@@ -1280,14 +1341,15 @@ export default function App() {
     }).catch(() => {});
   }, [inventoryDraft, showToast]);
 
-  const addToCart = useCallback((item) => {
+  const addToCart = useCallback((item, qty = 1) => {
     if (!item?.name) {
       showToast('El producto todavía no tiene nombre. Cargalo en el inventario.', 'error');
       return;
     }
+    const amount = Math.max(1, Math.floor(Number(qty) || 1));
     setCart(prev => {
       const existing = prev.find(row => overlaps(row, item));
-      if (existing) return prev.map(row => overlaps(row, item) ? { ...row, qty: row.qty + 1, price: Number(item.price) || row.price } : row);
+      if (existing) return prev.map(row => overlaps(row, item) ? { ...row, qty: row.qty + amount, price: Number(item.price) || row.price } : row);
       return [...prev, {
         barcode: item.barcode || activeBarcode,
         name: item.name,
@@ -1296,10 +1358,17 @@ export default function App() {
         image: item.image || '',
         price: Number(item.price) || 0,
         stock: Number(item.stock) || 0,
-        qty: 1,
+        qty: amount,
       }];
     });
-    showToast(Number(item.price) > 0 ? `${item.name} agregado a la compra.` : `${item.name} agregado. Cargá el precio en el inventario.`, Number(item.price) > 0 ? 'success' : 'info');
+    showToast({
+      type: 'cart',
+      title: 'Agregado a la compra',
+      message: `${amount} × ${item.name}${Number(item.price) > 0 ? ` · ${money(Number(item.price) * amount)}` : ''}`,
+      action: 'Ver compra',
+      actionScreen: 'cart',
+    });
+    try { navigator.vibrate?.(35); } catch { }
   }, [activeBarcode, showToast]);
 
   const changeQty = useCallback((barcode, delta) => {
@@ -1332,7 +1401,13 @@ export default function App() {
     setCart([]);
     setScreen('purchases');
     setMenuOpen(false);
-    showToast('Compra finalizada. El stock se actualizó.');
+    showToast({
+      type: 'success',
+      title: 'Venta registrada',
+      message: `Total ${money(purchase.total)} · El stock ya se actualizó.`,
+      action: 'Escanear',
+      actionScreen: 'scanner',
+    });
   }, [cart, showToast]);
 
   const clearData = useCallback(() => {
@@ -1352,7 +1427,20 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+      if (import.meta.env.PROD) {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+      } else {
+        navigator.serviceWorker.getRegistrations()
+          .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+          .catch(() => {});
+        if ('caches' in window) {
+          caches.keys()
+            .then(keys => Promise.all(keys
+              .filter(key => key.startsWith('cleanstock-shell-') || key.startsWith('limpia-shell-'))
+              .map(key => caches.delete(key))))
+            .catch(() => {});
+        }
+      }
     }
     const handler = (event) => {
       event.preventDefault();
@@ -1540,8 +1628,7 @@ export default function App() {
               onScanAgain={openScanner}
               onAddInventory={() => openInventoryForm(null, { barcode: activeBarcode, origin: 'product' })}
               onEditInventory={() => openInventoryForm(product, { origin: 'product' })}
-              onAddToCart={() => addToCart(product)}
-              onCartDetail={() => { setBackScreen('product'); navigate('cart'); }}
+              onAddToCart={(qty) => addToCart(product, qty)}
               onFinalize={finalizePurchase}
             />
           )}
@@ -1556,7 +1643,7 @@ export default function App() {
               onFinalize={finalizePurchase}
             />
           )}
-          {screen === 'purchases' && <PurchasesScreen purchases={purchases} onBack={goBack} />}
+          {screen === 'purchases' && <PurchasesScreen purchases={purchases} onBack={goBack} onScan={openScanner} />}
           {screen === 'products' && (
             <ProductsScreen
               catalog={catalog}
@@ -1624,7 +1711,20 @@ export default function App() {
         cartCount={cartCount}
       />
       {showInstallHelp && <InstallDialog onClose={() => setShowInstallHelp(false)} />}
-      <Toast toast={toast} />
+      <Toast
+        toast={toast}
+        onAction={() => {
+          if (!toast?.action) return;
+          const target = toast.actionScreen || 'cart';
+          setToast(null);
+          if (target === 'scanner') {
+            openScanner();
+            return;
+          }
+          setBackScreen(screen === 'scanner' ? 'home' : screen);
+          navigate('cart');
+        }}
+      />
     </div>
   );
 }
