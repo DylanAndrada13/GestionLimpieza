@@ -1,4 +1,4 @@
-const CACHE = 'limpia-shell-v3';
+const CACHE = 'cleanstock-shell-v1';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {
@@ -12,7 +12,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key.startsWith('limpia-shell-') && key !== CACHE).map(key => caches.delete(key)));
+    await Promise.all(keys.filter(key => (key.startsWith('limpia-shell-') || key.startsWith('cleanstock-shell-')) && key !== CACHE).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });

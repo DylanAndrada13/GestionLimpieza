@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="19" fill="#baff45"/><path d="M23 13h18v5h-2v8l10 19a8 8 0 0 1-7 12H22a8 8 0 0 1-7-12l10-19v-8h-2zm7 13-11 21a3 3 0 0 0 3 5h20a3 3 0 0 0 3-5L34 26v-8h-4z" fill="#123a36"/><path d="M20 44h24" stroke="#123a36" stroke-width="4" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4b23b8"/>
+      <stop offset="1" stop-color="#6b3ce2"/>
+    </linearGradient>
+    <linearGradient id="drop" x1="18" y1="12" x2="46" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#79e9ff"/>
+      <stop offset="1" stop-color="#2b9fe7"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="19" fill="url(#bg)"/>
+  <path d="M32 10S19 24.2 19 32.6a13 13 0 0 0 26 0C45 24.2 32 10 32 10Z" fill="url(#drop)"/>
+  <path d="M32 39.2c-4.9 0-8.5-3.1-8.5-7.2 0-1 .2-1.9.6-2.9 1.9 1.7 4.7 2.9 7.9 2.9 2.8 0 5.3-.8 7.1-2.2.3.9.4 1.8.4 2.8 0 4.2-3.6 7.6-7.5 7.6Z" fill="#371a8f"/>
+</svg>

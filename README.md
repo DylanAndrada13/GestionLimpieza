@@ -1,6 +1,6 @@
-# Limpia · escáner PWA
+# CleanStock · escáner PWA
 
-Una aplicación móvil para identificar códigos EAN/UPC de productos de limpieza y mantener un catálogo propio.
+Aplicación móvil para escanear códigos EAN/UPC de productos de limpieza, mantener el inventario del local con stock y precio, y registrar compras descontando unidades automáticamente.
 
 ## Ejecutar en desarrollo
 
