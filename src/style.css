@@ -1392,7 +1392,7 @@ img { max-width: 100%; }
 
 .drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(16, 8, 42, 0.46); backdrop-filter: blur(3px); display: flex; justify-content: flex-end; }
 .drawer {
-  width: min(82vw, 322px);
+  width: min(86vw, 360px);
   height: 100%;
   background: #fff;
   border-radius: 26px 0 0 26px;
@@ -1405,20 +1405,16 @@ img { max-width: 100%; }
 }
 .drawer-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
 .drawer .brand-lockup { color: var(--purple-950); }
-.drawer-hello { display: flex; align-items: flex-start; gap: 10px; margin: 17px 0 15px; padding: 12px; border-radius: 14px; background: linear-gradient(140deg, #f0ecfc, #f7f5fe); }
-.drawer-avatar { width: 38px; height: 38px; border-radius: 11px; background: #6d3ee3; color: #fff; display: grid; place-items: center; flex: none; }
-.drawer-hello > div { display: flex; flex-direction: column; gap: 2px; }
-.drawer-hello strong { color: var(--ink); font-size: 11.5px; font-weight: 600; }
-.drawer-hello span { color: #837e9d; font-size: 9.5px; line-height: 1.45; }
-.drawer-nav { display: flex; flex-direction: column; gap: 3px; }
-.drawer-nav button { border: 0; background: transparent; color: #48436a; border-radius: 11px; display: flex; align-items: center; gap: 10px; padding: 11px 10px; font-size: 12px; font-weight: 500; text-align: left; cursor: pointer; }
+.drawer-nav { display: flex; flex: 1; flex-direction: column; justify-content: space-evenly; gap: 8px; padding: 16px 0; }
+.drawer-nav button { min-height: 58px; border: 1px solid transparent; background: transparent; color: #48436a; border-radius: 15px; display: flex; align-items: center; gap: 14px; padding: 14px 13px; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
 .drawer-nav button:hover { background: #f5f2fd; }
 .drawer-nav button svg { color: #7750dc; flex: none; }
 .drawer-nav button span { flex: 1; }
 .drawer-badge { min-width: 18px; height: 18px; border-radius: 9px; background: var(--purple-600); color: #fff; font-size: 9px; font-weight: 600; display: grid; place-items: center; padding: 0 5px; }
 .drawer-chevron { color: #b0abc1; }
-.drawer-install { margin-top: 18px; border: 0; background: #f0ecfc; color: #5b32cd; border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
-.drawer-foot { margin: auto 0 0; padding-top: 18px; color: #aaa5b9; font-size: 9px; text-align: center; }
+.drawer-install, .drawer-logout { min-height: 54px; border: 1px solid rgba(91, 50, 205, .12); background: #f0ecfc; color: #5b32cd; border-radius: 14px; padding: 13px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.drawer-logout { margin-top: 10px; border-color: rgba(162, 74, 57, .2); background: #fbefec; color: #9f4235; }
+.drawer-install:disabled, .drawer-logout:disabled { opacity: .65; cursor: wait; }
 
 /* ------------------------------------------------------------------ */
 /* Modales y notificaciones                                            */
@@ -1650,6 +1646,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .home-hero::before { width: 300px; height: 300px; right: -164px; top: 85px; border-color: rgba(221, 177, 82, .28); }
 .home-hero::after { background: rgba(193, 146, 49, .08); filter: blur(15px); }
 .home-hero-top { align-items: center; }
+.home-hero { padding-top: calc(24px + env(safe-area-inset-top)); }
+.compact-header { padding-top: calc(20px + env(safe-area-inset-top)); }
 .brand-lockup { color: #f4d27b; font-size: 14px; font-weight: 600; letter-spacing: .015em; gap: 10px; }
 .brand-lockup.is-small { font-size: 13px; }
 .brand-lockup span { transform: none; }
@@ -1777,15 +1775,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .drawer, .install-dialog, .confirm-dialog { background: #15130f; border: 1px solid rgba(220, 177, 79, .32); }
 .drawer .brand-lockup { color: #f0c85f; }
 .drawer-top { border-color: rgba(220, 177, 79, .24); }
-.drawer-hello { background: linear-gradient(140deg, #211b10, #17140e); border: 1px solid rgba(220, 177, 79, .18); }
-.drawer-avatar { background: #a77b29; color: #110e08; }
-.drawer-hello strong { color: #f3ead7; }
-.drawer-hello span, .drawer-foot { color: #a79d89; }
 .drawer-nav button { color: #e4dac6; }
-.drawer-nav button:hover { background: #241e12; }
+.drawer-nav button:hover { background: #241e12; border-color: rgba(220, 177, 79, .2); }
 .drawer-nav button svg, .drawer-install { color: #e0b74e; }
+.drawer-nav button .drawer-chevron { color: #93846a; }
 .drawer-badge { background: #c4973d; color: #100d07; }
 .drawer-install { background: #261f12; }
+.drawer-logout { background: #291916; border-color: rgba(203, 101, 83, .25); color: #e28d7f; }
 .icon-close { background: #282116; color: #e3c46d; }
 .toast { background: #211c13; border: 1px solid rgba(221, 177, 78, .3); color: #f4edde; }
 .toast-icon { background: #2b2517; color: #e3bf60; }

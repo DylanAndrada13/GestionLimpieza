@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { lookupEzCatalog } from './lib/ez-catalog.js';
 import { GET as getShopState } from './api/shop/state.js';
+import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
 import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
 import { POST as recordShopPurchase } from './api/shop/purchases.js';
 import { POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
@@ -31,6 +32,7 @@ function ezCatalogDevApi() {
 
 function shopDataDevApi() {
   const handlers = {
+    '/session': { GET: checkShopSession, POST: createShopSession, DELETE: clearShopSession },
     '/state': { GET: getShopState },
     '/products': { POST: saveShopProduct, DELETE: resetShopProducts },
     '/purchases': { POST: recordShopPurchase },

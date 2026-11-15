@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { lookupEzCatalog } from './lib/ez-catalog.js';
 import { contributeSharedProduct, contributionRateLimited, lookupSharedBarcode, searchSharedCatalog } from './lib/shared-catalog.js';
 import { GET as getShopState } from './api/shop/state.js';
+import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
 import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
 import { POST as recordShopPurchase } from './api/shop/purchases.js';
 import { POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
@@ -18,6 +19,9 @@ app.use(express.json({ limit: '256kb' }));
 const asRequest = req => ({ headers: { get: name => req.headers[name.toLowerCase()] || null } });
 
 const shopHandlers = {
+  'GET /api/shop/session': checkShopSession,
+  'POST /api/shop/session': createShopSession,
+  'DELETE /api/shop/session': clearShopSession,
   'GET /api/shop/state': getShopState,
   'POST /api/shop/products': saveShopProduct,
   'DELETE /api/shop/products': resetShopProducts,

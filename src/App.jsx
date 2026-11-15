@@ -14,6 +14,7 @@ import {
   Home,
   Info,
   Loader2,
+  LogOut,
   Menu,
   Minus,
   Package,
@@ -24,7 +25,6 @@ import {
   Search,
   ShieldCheck,
   ShoppingCart,
-  Sparkles,
   Tag,
   Trash2,
   User,
@@ -76,7 +76,7 @@ function Brand({ onClick, small = false }) {
   );
 }
 
-function DatabaseGate({ password, onPasswordChange, onSubmit, message, busy, configured }) {
+function DatabaseGate({ password, onPasswordChange, onSubmit, message, showMissingPassword, busy, configured }) {
   return (
     <div className="app-shell screen-database-gate">
       <main className="database-gate">
@@ -86,11 +86,12 @@ function DatabaseGate({ password, onPasswordChange, onSubmit, message, busy, con
         <form onSubmit={onSubmit}>
           <label className="field">
             <span>Clave de acceso</span>
-            <input type="password" value={password} onChange={event => onPasswordChange(event.target.value)} autoComplete="current-password" required />
+            <input type="password" value={password} onChange={event => onPasswordChange(event.target.value)} autoComplete="current-password" />
           </label>
+          {showMissingPassword && <div className="form-error"><Info size={16} /> Ingresa la clave de acceso del local.</div>}
           {message && <div className="form-error"><Info size={16} /> {message}</div>}
           <button className="primary-cta" type="submit" disabled={busy || !configured}>
-            {busy ? <><Loader2 size={17} className="spin" /> Conectando con Supabase…</> : 'Conectar con la base de datos'}
+            {busy ? <><Loader2 size={17} className="spin" /> Iniciando…</> : 'Iniciar'}
           </button>
         </form>
       </main>
@@ -170,19 +171,12 @@ function HeroArt() {
   );
 }
 
-function BottomNav({ active, onNavigate, cartCount, home = false }) {
-  const tabs = home
-    ? [
-        { id: 'home', label: 'Inicio', icon: Home },
-        { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
-        { id: 'profile', label: 'Ajustes', icon: User },
-      ]
-    : [
-        { id: 'home', label: 'Inicio', icon: Home },
-        { id: 'products', label: 'Productos', icon: Box },
-        { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
-        { id: 'profile', label: 'Ajustes', icon: User },
-      ];
+function BottomNav({ active, onNavigate, cartCount }) {
+  const tabs = [
+    { id: 'home', label: 'Inicio', icon: Home },
+    { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
+    { id: 'profile', label: 'Ajustes', icon: User },
+  ];
 
   return (
     <nav className="bottom-nav" aria-label="Navegación principal">
@@ -220,7 +214,7 @@ function CompactHeader({ onMenu, onHome }) {
   );
 }
 
-function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
+function MenuDrawer({ open, onClose, onNavigate, onInstall, onLogout, cartCount, loggingOut }) {
   if (!open) return null;
   const links = [
     { id: 'home', label: 'Inicio', icon: Home },
@@ -235,13 +229,6 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
         <div className="drawer-top">
           <Brand onClick={() => { onNavigate('home'); onClose(); }} />
           <button type="button" className="icon-close" onClick={onClose} aria-label="Cerrar menú"><X size={20} /></button>
-        </div>
-        <div className="drawer-hello">
-          <span className="drawer-avatar"><Sparkles size={18} /></span>
-          <div>
-            <strong>Tu local, en orden</strong>
-            <span>Inventario, compras y stock en un solo lugar.</span>
-          </div>
         </div>
         <nav className="drawer-nav">
           {links.map(link => {
@@ -260,7 +247,10 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
           <Download size={19} />
           <span>Instalar la app</span>
         </button>
-        <p className="drawer-foot">CR Perfumería</p>
+        <button type="button" className="drawer-logout" onClick={onLogout} disabled={loggingOut}>
+          {loggingOut ? <Loader2 size={19} className="spin" /> : <LogOut size={19} />}
+          <span>{loggingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}</span>
+        </button>
       </aside>
     </div>
   );
@@ -1195,7 +1185,8 @@ export default function App() {
   const [databaseBusy, setDatabaseBusy] = useState(false);
   const [databaseMessage, setDatabaseMessage] = useState('');
   const [gatePassword, setGatePassword] = useState('');
-  const [shopPassword, setShopPassword] = useState('');
+  const [loginAttempted, setLoginAttempted] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1211,20 +1202,34 @@ export default function App() {
   const cartRef = useRef([]);
   const cartMutationRef = useRef(Promise.resolve());
 
+  const invalidateShopSession = useCallback(() => {
+    setDatabaseStatus('locked');
+    setCatalog([]);
+    setCart([]);
+    cartRef.current = [];
+    setPurchases([]);
+    setHistory([]);
+    setScreen('home');
+    setMenuOpen(false);
+    setGatePassword('');
+    setLoginAttempted(false);
+    setDatabaseMessage('La sesión terminó. Iniciá sesión de nuevo.');
+  }, []);
+
   const requestShop = useCallback(async (path, options = {}) => {
     const response = await fetch(path, {
       ...options,
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(shopPassword ? { 'X-Shop-Password': shopPassword } : {}),
         ...options.headers,
       },
     });
     let payload = {};
     try { payload = await response.json(); } catch { }
+    if (response.status === 401) invalidateShopSession();
     if (!response.ok) throw Object.assign(new Error(payload.error || `La base de datos respondió ${response.status}.`), { status: response.status });
     return payload;
-  }, [shopPassword]);
+  }, [invalidateShopSession]);
 
   const commitCart = useCallback((update) => {
     const commit = async () => {
@@ -1252,10 +1257,17 @@ export default function App() {
 
   const connectDatabase = useCallback(async (event) => {
     event.preventDefault();
-    setDatabaseBusy(true);
+    setLoginAttempted(true);
     setDatabaseMessage('');
+    if (!gatePassword.trim()) return;
+    setDatabaseBusy(true);
     try {
-      const response = await fetch('/api/shop/state', { headers: { 'X-Shop-Password': gatePassword }, cache: 'no-store' });
+      const response = await fetch('/api/shop/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: gatePassword }),
+        cache: 'no-store',
+      });
       let payload = {};
       try { payload = await response.json(); } catch { }
       if (!response.ok) {
@@ -1263,7 +1275,8 @@ export default function App() {
         setDatabaseMessage(payload.error || 'No se pudo conectar con Supabase.');
         return;
       }
-      setShopPassword(gatePassword);
+      setGatePassword('');
+      setLoginAttempted(false);
       applyShopState(payload);
     } catch {
       setDatabaseMessage('No se pudo contactar al servidor. Comprobá la conexión e intentá otra vez.');
@@ -1271,6 +1284,14 @@ export default function App() {
       setDatabaseBusy(false);
     }
   }, [applyShopState, gatePassword]);
+
+  const logout = useCallback(async () => {
+    setLoggingOut(true);
+    try { await fetch('/api/shop/session', { method: 'DELETE', cache: 'no-store' }); } catch { }
+    invalidateShopSession();
+    setDatabaseMessage('');
+    setLoggingOut(false);
+  }, [invalidateShopSession]);
 
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
@@ -1579,7 +1600,7 @@ export default function App() {
         if (response.ok) applyShopState(payload);
         else {
           setDatabaseConfigured(response.status !== 503);
-          setDatabaseMessage(payload.error || 'Conectate para cargar los datos desde Supabase.');
+          setDatabaseMessage(response.status === 401 ? '' : payload.error || 'Conectate para cargar los datos desde Supabase.');
           setDatabaseStatus('locked');
         }
       } catch {
@@ -1591,6 +1612,26 @@ export default function App() {
     })();
     return () => { alive = false; };
   }, [applyShopState]);
+  useEffect(() => {
+    if (databaseStatus !== 'ready') return undefined;
+    let checking = false;
+    const verifySession = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch('/api/shop/session', { cache: 'no-store' });
+        if (response.status === 401) invalidateShopSession();
+      } catch { }
+      checking = false;
+    };
+    const timer = window.setInterval(verifySession, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void verifySession(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [databaseStatus, invalidateShopSession]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
   useEffect(() => {
@@ -1715,11 +1756,11 @@ export default function App() {
 
   const navActive = ['cart', 'purchases'].includes(screen)
     ? 'purchases'
-    : ['products', 'inventory-form'].includes(screen)
-      ? 'products'
-      : screen === 'profile'
+    : screen === 'profile'
         ? 'profile'
-        : 'home';
+        : screen === 'home'
+          ? 'home'
+          : null;
 
   const goBack = () => {
     if (screen === 'inventory-form') {
@@ -1738,6 +1779,7 @@ export default function App() {
           onPasswordChange={setGatePassword}
           onSubmit={connectDatabase}
           message={databaseMessage}
+          showMissingPassword={loginAttempted && !gatePassword.trim()}
           busy={databaseBusy || databaseStatus === 'loading'}
           configured={databaseConfigured}
         />
@@ -1856,7 +1898,6 @@ export default function App() {
           active={navActive}
           onNavigate={navigate}
           cartCount={cartCount}
-          home={screen === 'home' || screen === 'profile'}
         />
       )}
 
@@ -1865,7 +1906,9 @@ export default function App() {
         onClose={() => setMenuOpen(false)}
         onNavigate={navigate}
         onInstall={install}
+        onLogout={logout}
         cartCount={cartCount}
+        loggingOut={loggingOut}
       />
       {showInstallHelp && <InstallDialog onClose={() => setShowInstallHelp(false)} />}
       {showIntro && <StartupIntro />}
