@@ -171,10 +171,10 @@ function HeroArt() {
   );
 }
 
-function BottomNav({ active, onNavigate, cartCount }) {
+function BottomNav({ active, onNavigate, purchaseNoticeCount }) {
   const tabs = [
     { id: 'home', label: 'Inicio', icon: Home },
-    { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
+    { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: purchaseNoticeCount },
     { id: 'profile', label: 'Ajustes', icon: User },
   ];
 
@@ -214,12 +214,12 @@ function CompactHeader({ onMenu, onHome }) {
   );
 }
 
-function MenuDrawer({ open, onClose, onNavigate, onInstall, onLogout, cartCount, loggingOut }) {
+function MenuDrawer({ open, onClose, onNavigate, onInstall, onLogout, purchaseNoticeCount, loggingOut }) {
   if (!open) return null;
   const links = [
     { id: 'home', label: 'Inicio', icon: Home },
     { id: 'products', label: 'Productos', icon: Box },
-    { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
+    { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: purchaseNoticeCount },
     { id: 'history', label: 'Historial', icon: History },
     { id: 'profile', label: 'Ajustes', icon: User },
   ];
@@ -393,7 +393,7 @@ function LoadingProduct({ barcode }) {
   );
 }
 
-function NotFoundProduct({ barcode, cart, cartTotal, onAddInventory, onScanAgain, onFinalize }) {
+function NotFoundProduct({ barcode, cart, cartTotal, onAddInventory, onScanAgain, onReviewPurchase }) {
   return (
     <section className="not-found">
       <div className="not-found-mark">
@@ -409,7 +409,7 @@ function NotFoundProduct({ barcode, cart, cartTotal, onAddInventory, onScanAgain
         </button>
         <div className="product-actions-row">
           <ScanNextButton onClick={onScanAgain} />
-          <FinalizeButton cart={cart} total={cartTotal} onFinalize={onFinalize} />
+          <ReviewPurchaseButton cart={cart} total={cartTotal} onReview={onReviewPurchase} />
         </div>
       </div>
     </section>
@@ -424,8 +424,7 @@ function ScanNextButton({ onClick }) {
   );
 }
 
-function FinalizeButton({ cart, total, onFinalize, wide = false }) {
-  const [confirming, setConfirming] = useState(false);
+function FinalizeButton({ cart, total, onFinalize, wide = false, busy = false }) {
   const units = cartUnits(cart);
   const disabled = !cart.length;
   return (
@@ -433,37 +432,35 @@ function FinalizeButton({ cart, total, onFinalize, wide = false }) {
       <button
         type="button"
         className={`finalize-cta ${wide ? 'is-wide' : ''}`}
-        onClick={() => setConfirming(true)}
-        disabled={disabled}
+        onClick={onFinalize}
+        disabled={disabled || busy}
       >
-        <span className="finalize-icon"><CheckCircle2 size={19} strokeWidth={2.2} /></span>
+        <span className="finalize-icon">{busy ? <Loader2 size={19} className="spin" /> : <CheckCircle2 size={19} strokeWidth={2.2} />}</span>
         <span className="finalize-copy">
-          <strong>Finalizar compra</strong>
+          <strong>{busy ? 'Registrando compra…' : 'Finalizar compra'}</strong>
           <small>{disabled ? 'Sin productos' : `${units} unidad${units === 1 ? '' : 'es'} · ${money(total)}`}</small>
         </span>
       </button>
 
-      {confirming && (
-        <div className="modal-backdrop" onClick={() => setConfirming(false)}>
-          <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="finalize-title" onClick={event => event.stopPropagation()}>
-            <div className="confirm-icon finalize"><CheckCircle2 size={25} /></div>
-            <h2 id="finalize-title">¿Finalizar la compra?</h2>
-            <p>
-              {cart.length} producto{cart.length === 1 ? '' : 's'} · {units} unidad{units === 1 ? '' : 'es'} · total {money(total)}.
-              {' '}Se va a descontar el stock del inventario.
-            </p>
-            <div className="confirm-actions">
-              <button type="button" className="secondary-cta compact" onClick={() => setConfirming(false)}>Cancelar</button>
-              <button type="button" className="finalize-confirm" onClick={() => { setConfirming(false); onFinalize(); }}>Finalizar compra</button>
-            </div>
-          </section>
-        </div>
-      )}
     </>
   );
 }
 
-function FoundProduct({ product, busy, cart, cartTotal, onAdd, onScanAgain, onFinalize, onEditInventory, canEdit }) {
+function ReviewPurchaseButton({ cart, total, onReview }) {
+  const units = cartUnits(cart);
+  const disabled = !cart.length;
+  return (
+    <button type="button" className="finalize-cta" onClick={onReview} disabled={disabled}>
+      <span className="finalize-icon"><CheckCircle2 size={19} strokeWidth={2.2} /></span>
+      <span className="finalize-copy">
+        <strong>Finalizar compra</strong>
+        <small>{disabled ? 'Sin productos' : `${units} unidad${units === 1 ? '' : 'es'} · ${money(total)}`}</small>
+      </span>
+    </button>
+  );
+}
+
+function FoundProduct({ product, busy, cart, cartTotal, onAdd, onScanAgain, onReviewPurchase, onEditInventory, canEdit }) {
   const stock = Number(product.stock) || 0;
   const [qty, setQty] = useState(1);
   const maxQty = product.inInventory && stock > 0 ? stock : 999;
@@ -529,7 +526,7 @@ function FoundProduct({ product, busy, cart, cartTotal, onAdd, onScanAgain, onFi
         </button>
         <div className="product-actions-row">
           <ScanNextButton onClick={onScanAgain} />
-          <FinalizeButton cart={cart} total={cartTotal} onFinalize={onFinalize} />
+          <ReviewPurchaseButton cart={cart} total={cartTotal} onReview={onReviewPurchase} />
         </div>
       </div>
 
@@ -553,7 +550,7 @@ function ProductScreen({
   onAddInventory,
   onEditInventory,
   onAddToCart,
-  onFinalize,
+  onReviewPurchase,
 }) {
   const loading = busy && !product?.name;
   const found = Boolean(product?.name);
@@ -573,7 +570,7 @@ function ProductScreen({
           cartTotal={cartTotal}
           onAdd={onAddToCart}
           onScanAgain={onScanAgain}
-          onFinalize={onFinalize}
+          onReviewPurchase={onReviewPurchase}
           onEditInventory={onEditInventory}
           canEdit
         />
@@ -585,14 +582,14 @@ function ProductScreen({
           cartTotal={cartTotal}
           onAddInventory={onAddInventory}
           onScanAgain={onScanAgain}
-          onFinalize={onFinalize}
+          onReviewPurchase={onReviewPurchase}
         />
       )}
     </main>
   );
 }
 
-function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFinalize }) {
+function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFinalize, finalizing }) {
   const units = cartUnits(cart);
   return (
     <main className="app-body">
@@ -634,7 +631,7 @@ function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFina
             <div><span>Productos</span><strong>{cart.length}</strong></div>
             <div><span>Unidades</span><strong>{units}</strong></div>
             <div className="cart-total"><span>Total</span><strong>{money(total)}</strong></div>
-            <FinalizeButton cart={cart} total={total} onFinalize={onFinalize} wide />
+            <FinalizeButton cart={cart} total={total} onFinalize={onFinalize} wide busy={finalizing} />
             <button type="button" className="secondary-cta compact" onClick={onScan}>
               <Camera size={17} /> Seguir escaneando
             </button>
@@ -658,7 +655,7 @@ function PurchasesScreen({ purchases, onBack, onScan }) {
         action={today.length > 0 ? <span className="today-pill">Hoy · {money(todayTotal)}</span> : null}
       />
       <button type="button" className="scan-again-cta" onClick={onScan}>
-        <Camera size={18} /> Escanear siguiente producto
+        <ShoppingCart size={18} /> Iniciar nueva compra
       </button>
       {purchases.length === 0 ? (
         <EmptyState icon={ShoppingCart} title="Todavía no hay compras" text="Cuando finalices una compra, va a quedar registrada acá y el stock se va a descontar." />
@@ -954,7 +951,7 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
 
       <section className="profile-section inventory-reset-section">
         <h2>Inventario</h2>
-        <p>Este botón elimina todos los productos registrados, incluidos sus precios y stock.</p>
+        <p>Este botón pone los precios de tus productos en $0. Los productos y el stock se conservan.</p>
         <button type="button" className="danger-button" onClick={() => setConfirming(true)}><Trash2 size={17} /> Reiniciar inventario</button>
       </section>
       <p className="version-note">CR Perfumería · versión 1.0</p>
@@ -963,11 +960,11 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
         <div className="modal-backdrop" onClick={() => setConfirming(false)}>
           <section className="confirm-dialog" role="dialog" aria-modal="true" onClick={event => event.stopPropagation()}>
             <div className="confirm-icon"><Trash2 size={24} /></div>
-            <h2>¿Reiniciar el inventario?</h2>
-            <p>Se eliminarán los productos registrados, sus precios y su stock de la base de datos. Las compras registradas se conservarán. Esta acción no se puede deshacer.</p>
+            <h2>¿Reiniciar los precios?</h2>
+            <p>Los precios de todos los productos se pondrán en $0. Los productos, el stock y las compras se conservarán.</p>
             <div className="confirm-actions">
               <button type="button" className="secondary-cta compact" onClick={() => setConfirming(false)}>Cancelar</button>
-              <button type="button" className="danger-button solid" onClick={() => { setConfirming(false); onResetInventory(); }}>Sí, reiniciar inventario</button>
+              <button type="button" className="danger-button solid" onClick={() => { setConfirming(false); onResetInventory(); }}>Sí, reiniciar precios</button>
             </div>
           </section>
         </div>
@@ -1179,6 +1176,8 @@ export default function App() {
   const [catalog, setCatalog] = useState([]);
   const [cart, setCart] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [purchaseNoticeCount, setPurchaseNoticeCount] = useState(0);
+  const [purchaseFinalizing, setPurchaseFinalizing] = useState(false);
   const [history, setHistory] = useState([]);
   const [databaseStatus, setDatabaseStatus] = useState('loading');
   const [databaseConfigured, setDatabaseConfigured] = useState(true);
@@ -1201,6 +1200,7 @@ export default function App() {
   const [inventoryDraft, setInventoryDraft] = useState(null);
   const cartRef = useRef([]);
   const cartMutationRef = useRef(Promise.resolve());
+  const purchaseFinalizingRef = useRef(false);
 
   const invalidateShopSession = useCallback(() => {
     setDatabaseStatus('locked');
@@ -1208,6 +1208,7 @@ export default function App() {
     setCart([]);
     cartRef.current = [];
     setPurchases([]);
+    setPurchaseNoticeCount(0);
     setHistory([]);
     setScreen('home');
     setMenuOpen(false);
@@ -1304,7 +1305,6 @@ export default function App() {
   const localProduct = useMemo(() => findLocalProduct(catalog, activeBarcode), [catalog, activeBarcode]);
   const externalProduct = useMemo(() => matches.find(item => item.name && item.image) || matches.find(item => item.name) || null, [matches]);
   const product = useMemo(() => mergeProduct(localProduct, externalProduct, activeBarcode), [localProduct, externalProduct, activeBarcode]);
-  const cartCount = cartUnits(cart);
   const cartTotal = cartAmount(cart);
   const inventoryItem = inventoryDraft ? findLocalProduct(catalog, inventoryDraft.barcode) : null;
 
@@ -1367,6 +1367,7 @@ export default function App() {
   }, [addHistory, showToast]);
   const navigate = useCallback((next) => {
     setMenuOpen(false);
+    if (next === 'purchases') setPurchaseNoticeCount(0);
     if (next === 'home') {
       setScreen('home');
       setBackScreen('home');
@@ -1375,8 +1376,15 @@ export default function App() {
     }
   }, []);
 
-  const openScanner = useCallback((mode = 'purchase') => {
+  const reviewPurchase = useCallback(() => {
+    setBackScreen(screen);
+    setScreen('cart');
+    setMenuOpen(false);
+  }, [screen]);
+
+  const openScanner = useCallback((mode = 'purchase', returnScreen = 'home') => {
     setScannerMode(mode === 'stock' ? 'stock' : 'purchase');
+    setBackScreen(mode === 'stock' ? 'home' : returnScreen);
     handledRef.current = false;
     setCameraError('');
     setZoomState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
@@ -1385,6 +1393,15 @@ export default function App() {
     setMenuOpen(false);
     setScreen('scanner');
   }, []);
+
+  const startNewPurchase = useCallback(async () => {
+    try {
+      await commitCart([]);
+      openScanner('purchase', 'home');
+    } catch (error) {
+      showToast(error.message || 'No se pudo iniciar una compra nueva.', 'error');
+    }
+  }, [commitCart, openScanner, showToast]);
 
   const openProduct = useCallback((item, back = 'products') => {
     const code = item?.barcode || '';
@@ -1419,7 +1436,7 @@ export default function App() {
   }, [activeBarcode, catalog]);
 
   const handleScannerCode = useCallback(async (rawValue) => {
-    if (scannerMode !== 'stock') return scanLookup(rawValue, { back: 'home' });
+    if (scannerMode !== 'stock') return scanLookup(rawValue, { back: backScreen || 'home' });
     const code = tidy(rawValue).replace(/\s/g, '');
     if (!isBarcode(code)) {
       showToast('Ingresá un código EAN o UPC de 8 a 14 números.', 'error');
@@ -1453,7 +1470,7 @@ export default function App() {
       if (token === lookupTokenRef.current) setBusy(false);
     }
     return true;
-  }, [addHistory, catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
+  }, [addHistory, backScreen, catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
   scannerCodeRef.current = handleScannerCode;
 
   const saveInventory = useCallback(async (entry) => {
@@ -1518,6 +1535,9 @@ export default function App() {
   }, [commitCart, showToast]);
 
   const finalizePurchase = useCallback(async () => {
+    if (purchaseFinalizingRef.current) return;
+    purchaseFinalizingRef.current = true;
+    setPurchaseFinalizing(true);
     try {
       await cartMutationRef.current;
       const items = cartRef.current;
@@ -1527,6 +1547,7 @@ export default function App() {
         body: JSON.stringify({ items }),
       });
       setPurchases(prev => [purchase, ...prev.filter(item => item.id !== purchase.id)].slice(0, 120));
+      setPurchaseNoticeCount(count => count + 1);
       setCatalog(updatedCatalog);
       cartRef.current = [];
       setCart([]);
@@ -1541,19 +1562,20 @@ export default function App() {
       });
     } catch (error) {
       showToast(error.message || 'No se pudo registrar la compra en Supabase.', 'error');
+    } finally {
+      purchaseFinalizingRef.current = false;
+      setPurchaseFinalizing(false);
     }
   }, [requestShop, showToast]);
 
   const resetInventory = useCallback(async () => {
     try {
       await requestShop('/api/shop/products', { method: 'DELETE' });
-      setCatalog([]);
-      cartRef.current = [];
-      setCart([]);
-      setMatches([]);
-      setActiveBarcode('');
+      const updatedAt = new Date().toISOString();
+      setCatalog(prev => prev.map(item => ({ ...item, price: 0, updatedAt })));
+      setMatches(prev => prev.map(item => ({ ...item, price: 0, updatedAt })));
       setScreen('profile');
-      showToast('Inventario reiniciado en Supabase. Las compras se conservaron.');
+      showToast('Precios reiniciados a $0. Los productos y el stock se conservaron.');
     } catch (error) {
       showToast(error.message || 'No se pudo reiniciar el inventario.', 'error');
     }
@@ -1793,7 +1815,7 @@ export default function App() {
       {screen === 'home' && (
         <HomeScreen
           onRegisterStock={() => openScanner('stock')}
-          onStartPurchase={() => openScanner('purchase')}
+          onStartPurchase={startNewPurchase}
           onViewPurchases={() => navigate('purchases')}
           onMenu={() => setMenuOpen(true)}
           onHome={() => navigate('home')}
@@ -1808,7 +1830,7 @@ export default function App() {
           focusMessage={focusMessage}
           zoomState={zoomState}
           onZoom={changeZoom}
-          onClose={() => setScreen('home')}
+          onClose={() => setScreen(backScreen || 'home')}
           onManual={handleScannerCode}
         />
       )}
@@ -1824,11 +1846,11 @@ export default function App() {
               cart={cart}
               cartTotal={cartTotal}
               onBack={goBack}
-              onScanAgain={openScanner}
+              onScanAgain={() => openScanner('purchase', 'product')}
               onAddInventory={() => openInventoryForm(null, { barcode: activeBarcode, origin: 'product' })}
               onEditInventory={() => openInventoryForm(product, { origin: 'product' })}
               onAddToCart={(qty) => addToCart(product, qty)}
-              onFinalize={finalizePurchase}
+              onReviewPurchase={reviewPurchase}
             />
           )}
           {screen === 'cart' && (
@@ -1836,13 +1858,14 @@ export default function App() {
               cart={cart}
               total={cartTotal}
               onBack={goBack}
-              onScan={openScanner}
+              onScan={() => openScanner('purchase', 'cart')}
               onChangeQty={changeQty}
               onRemove={removeFromCart}
               onFinalize={finalizePurchase}
+              finalizing={purchaseFinalizing}
             />
           )}
-          {screen === 'purchases' && <PurchasesScreen purchases={purchases} onBack={goBack} onScan={openScanner} />}
+          {screen === 'purchases' && <PurchasesScreen purchases={purchases} onBack={goBack} onScan={startNewPurchase} />}
           {screen === 'products' && (
             <ProductsScreen
               catalog={catalog}
@@ -1897,7 +1920,7 @@ export default function App() {
         <BottomNav
           active={navActive}
           onNavigate={navigate}
-          cartCount={cartCount}
+          purchaseNoticeCount={purchaseNoticeCount}
         />
       )}
 
@@ -1907,7 +1930,7 @@ export default function App() {
         onNavigate={navigate}
         onInstall={install}
         onLogout={logout}
-        cartCount={cartCount}
+        purchaseNoticeCount={purchaseNoticeCount}
         loggingOut={loggingOut}
       />
       {showInstallHelp && <InstallDialog onClose={() => setShowInstallHelp(false)} />}

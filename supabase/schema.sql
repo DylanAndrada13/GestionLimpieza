@@ -214,8 +214,9 @@ security definer
 set search_path = pg_catalog, public
 as $$
 begin
-  delete from public.shop_products;
-  delete from public.shop_cart where id = 'current';
+  update public.shop_products
+  set price = 0, updated_at = now()
+  where barcode is not null;
 end;
 $$;
 
