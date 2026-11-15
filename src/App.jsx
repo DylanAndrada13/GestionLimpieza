@@ -1304,10 +1304,8 @@ export default function App() {
   const logout = useCallback(async () => {
     setLoggingOut(true);
     try { await fetch('/api/shop/session', { method: 'DELETE', cache: 'no-store' }); } catch { }
-    invalidateShopSession();
-    setDatabaseMessage('');
-    setLoggingOut(false);
-  }, [invalidateShopSession]);
+    window.location.assign('/');
+  }, []);
 
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
