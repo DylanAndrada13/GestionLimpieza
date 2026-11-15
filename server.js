@@ -6,8 +6,8 @@ import { contributeSharedProduct, contributionRateLimited, lookupSharedBarcode, 
 import { GET as getShopState } from './api/shop/state.js';
 import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
 import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
-import { POST as recordShopPurchase } from './api/shop/purchases.js';
-import { POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
+import { GET as listShopPurchases, POST as recordShopPurchase } from './api/shop/purchases.js';
+import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
 import { POST as saveShopCart } from './api/shop/cart.js';
 
 const app = express();
@@ -26,8 +26,10 @@ const shopHandlers = {
   'POST /api/shop/products': saveShopProduct,
   'DELETE /api/shop/products': resetShopProducts,
   'POST /api/shop/purchases': recordShopPurchase,
+  'GET /api/shop/purchases': listShopPurchases,
   'POST /api/shop/cart': saveShopCart,
   'POST /api/shop/history': recordShopHistory,
+  'GET /api/shop/history': listShopHistory,
   'DELETE /api/shop/history': clearShopHistory,
 };
 

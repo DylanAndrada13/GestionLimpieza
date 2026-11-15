@@ -1,5 +1,15 @@
 import { shopAccessResponse } from '../../lib/shop-auth.js';
-import { clearShopHistory, recordShopScan } from '../../lib/shop-data.js';
+import { clearShopHistory, getShopHistory, recordShopScan } from '../../lib/shop-data.js';
+
+export async function GET(request) {
+  const denied = shopAccessResponse(request);
+  if (denied) return denied;
+  try {
+    return Response.json({ history: await getShopHistory() }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    return Response.json({ error: error.message || 'No se pudo cargar el historial.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+  }
+}
 
 export async function POST(request) {
   const denied = shopAccessResponse(request);

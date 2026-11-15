@@ -1176,9 +1176,11 @@ export default function App() {
   const [catalog, setCatalog] = useState([]);
   const [cart, setCart] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [purchasesLoaded, setPurchasesLoaded] = useState(false);
   const [purchaseNoticeCount, setPurchaseNoticeCount] = useState(0);
   const [purchaseFinalizing, setPurchaseFinalizing] = useState(false);
   const [history, setHistory] = useState([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [databaseStatus, setDatabaseStatus] = useState('loading');
   const [databaseConfigured, setDatabaseConfigured] = useState(true);
   const [databaseBusy, setDatabaseBusy] = useState(false);
@@ -1208,8 +1210,10 @@ export default function App() {
     setCart([]);
     cartRef.current = [];
     setPurchases([]);
+    setPurchasesLoaded(false);
     setPurchaseNoticeCount(0);
     setHistory([]);
+    setHistoryLoaded(false);
     setScreen('home');
     setMenuOpen(false);
     setGatePassword('');
@@ -1234,11 +1238,20 @@ export default function App() {
 
   const commitCart = useCallback((update) => {
     const commit = async () => {
+      const previous = cartRef.current;
       const next = typeof update === 'function' ? update(cartRef.current) : update;
-      const { cart: saved } = await requestShop('/api/shop/cart', { method: 'POST', body: JSON.stringify({ items: next }) });
-      cartRef.current = saved;
-      setCart(saved);
-      return saved;
+      cartRef.current = next;
+      setCart(next);
+      try {
+        const { cart: saved } = await requestShop('/api/shop/cart', { method: 'POST', body: JSON.stringify({ items: next }) });
+        cartRef.current = saved;
+        setCart(saved);
+        return saved;
+      } catch (error) {
+        cartRef.current = previous;
+        setCart(previous);
+        throw error;
+      }
     };
     const pending = cartMutationRef.current.then(commit, commit);
     cartMutationRef.current = pending.catch(() => {});
@@ -1251,7 +1264,9 @@ export default function App() {
     cartRef.current = loadedCart;
     setCart(loadedCart);
     setPurchases(data.purchases || []);
+    setPurchasesLoaded(Array.isArray(data.purchases));
     setHistory(data.history || []);
+    setHistoryLoaded(Array.isArray(data.history));
     setDatabaseStatus('ready');
     setDatabaseMessage('');
   }, []);
@@ -1338,33 +1353,45 @@ export default function App() {
     setBusy(true);
     setScreen('product');
     setMenuOpen(false);
-    try {
-      const found = await fetchSources(
-        code,
-        () => {},
-        item => {
-          if (token !== lookupTokenRef.current) return;
-          setMatches(prev => [...prev, item]);
-        },
-      );
-      if (token !== lookupTokenRef.current) return false;
-      setMatches(found);
-      const best = found.find(item => item.name);
-      await addHistory({
-        barcode: code,
-        at: new Date().toISOString(),
-        found: Boolean(best),
-        name: best?.name || '',
-      });
-    } catch {
-      if (token !== lookupTokenRef.current) return false;
-      setMatches([]);
-      await addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
-    } finally {
-      if (token === lookupTokenRef.current) setBusy(false);
+    const local = findLocalProduct(catalog, code);
+    if (local) {
+      setBusy(false);
+      void addHistory({ barcode: code, at: new Date().toISOString(), found: true, name: local.name });
+      return true;
     }
+
+    let historyRecorded = false;
+    const recordFound = item => {
+      if (!historyRecorded && item.name) {
+        historyRecorded = true;
+        void addHistory({ barcode: code, at: new Date().toISOString(), found: true, name: item.name });
+      }
+    };
+    void fetchSources(code, () => {}, item => {
+      if (token !== lookupTokenRef.current) return;
+      setMatches(previous => previous.some(match => match.source === item.source && match.barcode === item.barcode)
+        ? previous
+        : [...previous, item]);
+      if (item.name) {
+        setBusy(false);
+        recordFound(item);
+      }
+    }).then(found => {
+      if (token !== lookupTokenRef.current) return;
+      setMatches(found);
+      if (!historyRecorded) {
+        historyRecorded = true;
+        void addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
+      }
+    }).catch(() => {
+      if (token !== lookupTokenRef.current) return;
+      setMatches([]);
+      if (!historyRecorded) void addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
+    }).finally(() => {
+      if (token === lookupTokenRef.current) setBusy(false);
+    });
     return true;
-  }, [addHistory, showToast]);
+  }, [addHistory, catalog, showToast]);
   const navigate = useCallback((next) => {
     setMenuOpen(false);
     if (next === 'purchases') setPurchaseNoticeCount(0);
@@ -1395,6 +1422,10 @@ export default function App() {
   }, []);
 
   const startNewPurchase = useCallback(async () => {
+    if (!cartRef.current.length) {
+      openScanner('purchase', 'home');
+      return;
+    }
     try {
       await commitCart([]);
       openScanner('purchase', 'home');
@@ -1542,13 +1573,20 @@ export default function App() {
       await cartMutationRef.current;
       const items = cartRef.current;
       if (!items.length) return;
-      const { purchase, catalog: updatedCatalog } = await requestShop('/api/shop/purchases', {
+      const { purchase } = await requestShop('/api/shop/purchases', {
         method: 'POST',
         body: JSON.stringify({ items }),
       });
       setPurchases(prev => [purchase, ...prev.filter(item => item.id !== purchase.id)].slice(0, 120));
       setPurchaseNoticeCount(count => count + 1);
-      setCatalog(updatedCatalog);
+      const stockChanges = new Map();
+      items.forEach(item => equivalentBarcodes(item.barcode).forEach(code => {
+        stockChanges.set(code, (stockChanges.get(code) || 0) + (Number(item.qty) || 0));
+      }));
+      setCatalog(prev => prev.map(product => {
+        const sold = productBarcodes(product).reduce((maximum, code) => Math.max(maximum, stockChanges.get(code) || 0), 0);
+        return sold ? { ...product, stock: Math.max(0, Number(product.stock) - sold) } : product;
+      }));
       cartRef.current = [];
       setCart([]);
       setScreen('purchases');
@@ -1582,13 +1620,16 @@ export default function App() {
   }, [requestShop, showToast]);
 
   const clearScanHistory = useCallback(async () => {
+    const previous = history;
+    setHistory([]);
     try {
       await requestShop('/api/shop/history', { method: 'DELETE' });
-      setHistory([]);
+      setHistoryLoaded(true);
     } catch (error) {
+      setHistory(previous);
       showToast(error.message || 'No se pudo limpiar el historial.', 'error');
     }
-  }, [requestShop, showToast]);
+  }, [history, requestShop, showToast]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1654,11 +1695,35 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [databaseStatus, invalidateShopSession]);
+  useEffect(() => {
+    if (databaseStatus !== 'ready' || screen !== 'purchases' || purchasesLoaded) return undefined;
+    let active = true;
+    requestShop('/api/shop/purchases')
+      .then(({ purchases: rows }) => {
+        if (!active) return;
+        setPurchases(rows || []);
+        setPurchasesLoaded(true);
+      })
+      .catch(error => { if (active) showToast(error.message || 'No se pudieron cargar las compras.', 'error'); });
+    return () => { active = false; };
+  }, [databaseStatus, purchasesLoaded, requestShop, screen, showToast]);
+  useEffect(() => {
+    if (databaseStatus !== 'ready' || screen !== 'history' || historyLoaded) return undefined;
+    let active = true;
+    requestShop('/api/shop/history')
+      .then(({ history: rows }) => {
+        if (!active) return;
+        setHistory(rows || []);
+        setHistoryLoaded(true);
+      })
+      .catch(error => { if (active) showToast(error.message || 'No se pudo cargar el historial.', 'error'); });
+    return () => { active = false; };
+  }, [databaseStatus, historyLoaded, requestShop, screen, showToast]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
   useEffect(() => {
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const timer = setTimeout(() => setShowIntro(false), reducedMotion ? 80 : 1900);
+    const timer = setTimeout(() => setShowIntro(false), reducedMotion ? 40 : 950);
     return () => clearTimeout(timer);
   }, []);
 
@@ -1691,28 +1756,33 @@ export default function App() {
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Abrí la app mediante HTTPS para usar la cámara.');
-        const [{ BrowserMultiFormatReader, BarcodeFormat }, { DecodeHintType }] = await Promise.all([
+        const [{ BrowserMultiFormatOneDReader, BarcodeFormat }, { default: DecodeHintType }] = await Promise.all([
           import('@zxing/browser'),
-          import('@zxing/library'),
+          import('@zxing/library/esm/core/DecodeHintType.js'),
         ]);
         if (!alive) return;
-        const hints = new Map([
-          [DecodeHintType.POSSIBLE_FORMATS, [
-            BarcodeFormat.EAN_13,
-            BarcodeFormat.EAN_8,
-            BarcodeFormat.UPC_A,
-            BarcodeFormat.UPC_E,
-            BarcodeFormat.CODE_128,
-            BarcodeFormat.ITF,
-            BarcodeFormat.CODE_39,
-          ]],
-          [DecodeHintType.TRY_HARDER, true],
-        ]);
-        const reader = new BrowserMultiFormatReader(hints);
+        const hints = new Map([[DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.ITF,
+        ]]]);
+        const reader = new BrowserMultiFormatOneDReader(hints, {
+          delayBetweenScanAttempts: 50,
+          delayBetweenScanSuccess: 50,
+          tryPlayVideoTimeout: 3000,
+        });
         readerRef.current = reader;
         const controls = await reader.decodeFromConstraints({
           audio: false,
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          },
         }, videoRef.current, (result) => {
           if (!result || handledRef.current) return;
           const code = result.getText();
