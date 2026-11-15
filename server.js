@@ -7,6 +7,7 @@ import { GET as getShopState } from './api/shop/state.js';
 import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
 import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
 import { GET as listShopPurchases, POST as recordShopPurchase } from './api/shop/purchases.js';
+import { GET as listShopMovements } from './api/shop/movements.js';
 import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
 import { POST as saveShopCart } from './api/shop/cart.js';
 
@@ -27,6 +28,7 @@ const shopHandlers = {
   'DELETE /api/shop/products': resetShopProducts,
   'POST /api/shop/purchases': recordShopPurchase,
   'GET /api/shop/purchases': listShopPurchases,
+  'GET /api/shop/movements': listShopMovements,
   'POST /api/shop/cart': saveShopCart,
   'POST /api/shop/history': recordShopHistory,
   'GET /api/shop/history': listShopHistory,

@@ -5,6 +5,7 @@ import { GET as getShopState } from './api/shop/state.js';
 import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
 import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
 import { GET as listShopPurchases, POST as recordShopPurchase } from './api/shop/purchases.js';
+import { GET as listShopMovements } from './api/shop/movements.js';
 import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
 import { POST as saveShopCart } from './api/shop/cart.js';
 
@@ -36,6 +37,7 @@ function shopDataDevApi() {
     '/state': { GET: getShopState },
     '/products': { POST: saveShopProduct, DELETE: resetShopProducts },
     '/purchases': { GET: listShopPurchases, POST: recordShopPurchase },
+    '/movements': { GET: listShopMovements },
     '/cart': { POST: saveShopCart },
     '/history': { GET: listShopHistory, POST: recordShopHistory, DELETE: clearShopHistory },
   };

@@ -43,3 +43,16 @@
   .mode-option-copy small { font-size: 12px; }
   .mode-start-footer { position: static; margin-top: auto; align-self: center; text-align: center; }
 }
+
+.mode-start.theme-light { background: #f5f2ea; color: #282316; }
+.mode-start.theme-light .mode-start-glow { background: radial-gradient(ellipse, rgba(195, 145, 42, .16), transparent 68%); }
+.mode-start.theme-light .mode-start-brand { color: #765612; }
+.mode-start.theme-light .mode-start-content h1 { color: #282316; }
+.mode-start.theme-light .mode-start-content > p { color: #756d5d; }
+.mode-start.theme-light .mode-option { border-color: rgba(170, 128, 35, .35); background: linear-gradient(145deg, #fffdf8, #f0e8d6); color: #312a1d; box-shadow: 0 12px 28px rgba(43, 34, 15, .07); }
+.mode-start.theme-light .mode-option:hover { border-color: #bd963b; background: linear-gradient(145deg, #fffdf8, #efe4c8); }
+.mode-start.theme-light .mode-option-icon { background: #f0e5ca; color: #89671c; }
+.mode-start.theme-light .mode-option-copy strong { color: #684c12; }
+.mode-start.theme-light .mode-option-copy small { color: #6f6758; }
+.mode-start.theme-light .mode-option-arrow { color: #89671c; }
+.mode-start.theme-light .mode-start-footer { color: #82765d; }

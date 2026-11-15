@@ -2,11 +2,9 @@ import React from 'react';
 import { ArrowRight, LayoutDashboard, ShoppingCart } from 'lucide-react';
 import './mode-selector.css';
 
-export default function ModeSelector({ onSale }) {
-  const openManagement = () => window.location.assign('/gestion');
-
+export default function ModeSelector({ theme, onSale, onManagement }) {
   return (
-    <main className="mode-start">
+    <main className={`mode-start ${theme === 'light' ? 'theme-light' : ''}`}>
       <div className="mode-start-glow" />
       <header className="mode-start-brand">
         <img src="/nuevologo.jpg" alt="" />
@@ -25,7 +23,7 @@ export default function ModeSelector({ onSale }) {
             </span>
             <ArrowRight size={20} className="mode-option-arrow" />
           </button>
-          <button type="button" className="mode-option manage" onClick={openManagement}>
+          <button type="button" className="mode-option manage" onClick={onManagement}>
             <span className="mode-option-icon"><LayoutDashboard size={24} /></span>
             <span className="mode-option-copy">
               <strong>Modo gestión</strong>

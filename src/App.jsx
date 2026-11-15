@@ -25,6 +25,7 @@ import {
   Search,
   ShieldCheck,
   ShoppingCart,
+  Sun,
   Tag,
   Trash2,
   User,
@@ -41,6 +42,7 @@ import {
   tidy,
   totalUnits,
 } from './catalog';
+import ThemePicker from './ThemePicker';
 import './style.css';
 
 const DATE_FORMAT = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -76,9 +78,9 @@ function Brand({ onClick, small = false }) {
   );
 }
 
-function DatabaseGate({ password, onPasswordChange, onSubmit, message, showMissingPassword, busy, configured }) {
+function DatabaseGate({ password, onPasswordChange, onSubmit, message, showMissingPassword, busy, configured, theme }) {
   return (
-    <div className="app-shell screen-database-gate">
+    <div className={`app-shell screen-database-gate ${theme === 'light' ? 'theme-light' : ''}`}>
       <main className="database-gate">
         <LogoMark size={72} />
         <h1>Datos del local</h1>
@@ -95,17 +97,6 @@ function DatabaseGate({ password, onPasswordChange, onSubmit, message, showMissi
           </button>
         </form>
       </main>
-    </div>
-  );
-}
-
-function StartupIntro() {
-  return (
-    <div className="startup-intro" aria-hidden="true">
-      <div className="startup-intro-content">
-        <img src="/nuevologo.jpg" alt="" />
-        <strong>CR Perfumería</strong>
-      </div>
     </div>
   );
 }
@@ -914,7 +905,7 @@ function SearchScreen({ catalog, onBack, onLookup, onOpenLocal, onScan }) {
   );
 }
 
-function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, onHistory, onInstall, onResetInventory }) {
+function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, onHistory, onInstall, onResetInventory, theme, onThemeChange }) {
   const [confirming, setConfirming] = useState(false);
   const units = totalUnits(catalog);
   const sold = purchases.reduce((sum, purchase) => sum + (Number(purchase.total) || 0), 0);
@@ -941,6 +932,15 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
         <button type="button" className="profile-row" onClick={onProducts}><span className="profile-row-icon"><Box size={19} /></span><span><strong>Inventario</strong><small>{catalog.length} productos · {units} unidades</small></span><ChevronRight size={17} /></button>
         <button type="button" className="profile-row" onClick={onPurchases}><span className="profile-row-icon"><ShoppingCart size={19} /></span><span><strong>Compras</strong><small>{money(sold)} registrados</small></span><ChevronRight size={17} /></button>
         <button type="button" className="profile-row" onClick={onHistory}><span className="profile-row-icon"><History size={19} /></span><span><strong>Historial de escaneos</strong><small>Volvé a consultar un código</small></span><ChevronRight size={17} /></button>
+      </section>
+
+      <section className="profile-section">
+        <h2>Apariencia</h2>
+        <div className="profile-row appearance-row">
+          <span className="profile-row-icon"><Sun size={19} /></span>
+          <span><strong>Modo claro u oscuro</strong><small>Elegí el aspecto de la aplicación</small></span>
+          <ThemePicker theme={theme} onChange={onThemeChange} />
+        </div>
       </section>
 
       <section className="profile-section">
@@ -1167,7 +1167,7 @@ function ScannerScreen({
 /* Aplicación                                                          */
 /* ------------------------------------------------------------------ */
 
-export default function App() {
+export default function App({ theme = 'dark', onThemeChange = () => {}, onExit = () => {} }) {
   const [screen, setScreen] = useState('home');
   const [backScreen, setBackScreen] = useState('home');
   const [activeBarcode, setActiveBarcode] = useState('');
@@ -1188,7 +1188,6 @@ export default function App() {
   const [gatePassword, setGatePassword] = useState('');
   const [loginAttempted, setLoginAttempted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [showIntro, setShowIntro] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -1304,8 +1303,8 @@ export default function App() {
   const logout = useCallback(async () => {
     setLoggingOut(true);
     try { await fetch('/api/shop/session', { method: 'DELETE', cache: 'no-store' }); } catch { }
-    window.location.assign('/');
-  }, []);
+    onExit();
+  }, [onExit]);
 
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
@@ -1694,6 +1693,31 @@ export default function App() {
     };
   }, [databaseStatus, invalidateShopSession]);
   useEffect(() => {
+    if (databaseStatus !== 'ready') return undefined;
+    let active = true;
+    let pending = false;
+    const refreshSharedData = async () => {
+      if (!active || pending || document.visibilityState !== 'visible') return;
+      pending = true;
+      try {
+        const state = await requestShop('/api/shop/state');
+        if (active) setCatalog((state.catalog || []).map(sanitizeStoredProduct));
+        if (screen === 'purchases') {
+          const { purchases: latestPurchases } = await requestShop('/api/shop/purchases');
+          if (active) {
+            setPurchases(latestPurchases || []);
+            setPurchasesLoaded(true);
+          }
+        }
+      } catch { }
+      finally { pending = false; }
+    };
+    const timer = window.setInterval(refreshSharedData, 5000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshSharedData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [databaseStatus, requestShop, screen]);
+  useEffect(() => {
     if (databaseStatus !== 'ready' || screen !== 'purchases' || purchasesLoaded) return undefined;
     let active = true;
     requestShop('/api/shop/purchases')
@@ -1719,12 +1743,6 @@ export default function App() {
   }, [databaseStatus, historyLoaded, requestShop, screen, showToast]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
-  useEffect(() => {
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const timer = setTimeout(() => setShowIntro(false), reducedMotion ? 40 : 950);
-    return () => clearTimeout(timer);
-  }, []);
-
   const install = useCallback(async () => {
     if (!installPrompt) { setShowInstallHelp(true); return; }
     await installPrompt.prompt();
@@ -1872,14 +1890,14 @@ export default function App() {
           showMissingPassword={loginAttempted && !gatePassword.trim()}
           busy={databaseBusy || databaseStatus === 'loading'}
           configured={databaseConfigured}
+          theme={theme}
         />
-        {showIntro && <StartupIntro />}
       </>
     );
   }
 
   return (
-    <div className={`app-shell screen-${screen}`}>
+    <div className={`app-shell screen-${screen} ${theme === 'light' ? 'theme-light' : ''}`}>
       {screen === 'home' && (
         <HomeScreen
           onRegisterStock={() => openScanner('stock')}
@@ -1970,6 +1988,8 @@ export default function App() {
               onHistory={() => navigate('history')}
               onInstall={install}
               onResetInventory={resetInventory}
+              theme={theme}
+              onThemeChange={onThemeChange}
             />
           )}
           {screen === 'inventory-form' && inventoryDraft && (
@@ -2002,7 +2022,6 @@ export default function App() {
         loggingOut={loggingOut}
       />
       {showInstallHelp && <InstallDialog onClose={() => setShowInstallHelp(false)} />}
-      {showIntro && <StartupIntro />}
       <Toast
         toast={toast}
         onAction={() => {

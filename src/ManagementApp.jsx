@@ -12,6 +12,7 @@ import {
   Loader2,
   LogOut,
   Package,
+  PackagePlus,
   Pencil,
   Plus,
   Search,
@@ -19,10 +20,12 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Store,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
 import { productBarcodes } from './catalog';
+import ThemePicker from './ThemePicker';
 import './management.css';
 
 const LOW_STOCK = 5;
@@ -45,9 +48,9 @@ function Logo({ small = false }) {
   return <span className={`management-logo ${small ? 'is-small' : ''}`}><img src="/nuevologo.jpg" alt="" /><strong>CR Perfumería</strong></span>;
 }
 
-function EntryPanel({ password, setPassword, onSubmit, busy, message, onSales }) {
+function EntryPanel({ password, setPassword, onSubmit, busy, message, onSales, theme }) {
   return (
-    <main className="management-entry">
+    <main className={`management-entry ${theme === 'light' ? 'theme-light' : ''}`}>
       <section className="management-entry-card">
         <Logo />
         <span className="management-eyebrow">Modo gestión</span>
@@ -67,9 +70,9 @@ function EntryPanel({ password, setPassword, onSubmit, busy, message, onSales })
   );
 }
 
-function MobileNotice() {
+function MobileNotice({ theme }) {
   return (
-    <main className="management-mobile">
+    <main className={`management-mobile ${theme === 'light' ? 'theme-light' : ''}`}>
       <div className="management-mobile-card">
         <Logo />
         <div className="management-mobile-icon"><LayoutDashboard size={30} /></div>
@@ -190,42 +193,51 @@ function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
   );
 }
 
-function MovementsPage({ purchases, loading }) {
+function MovementsPage({ movements, loading, stockTrackingAvailable }) {
   const [openId, setOpenId] = useState('');
   return (
     <>
-      <div className="management-page-heading"><div><span className="management-eyebrow">Actividad del local</span><h1>Movimientos</h1><p>Compras registradas y unidades descontadas del inventario.</p></div></div>
+      <div className="management-page-heading"><div><span className="management-eyebrow">Actividad del local</span><h1>Movimientos</h1><p>Ingresos de stock y compras finalizadas.</p></div></div>
       <section className="management-panel management-movements-panel">
-        <header className="management-panel-heading"><div><span className="management-eyebrow">Historial</span><h2>Compras</h2></div><span className="management-count-pill">{number(purchases.length)} registros</span></header>
-        {loading ? <div className="management-loading-inline"><Loader2 size={19} className="management-spin" /> Cargando movimientos…</div> : purchases.length ? (
+        <header className="management-panel-heading"><div><span className="management-eyebrow">Historial</span><h2>Actividad reciente</h2></div><span className="management-count-pill">{number(movements.length)} registros</span></header>
+        {stockTrackingAvailable === false && <div className="management-movement-setup">Para guardar ingresos de stock, ejecutá la actualización de <strong>supabase/schema.sql</strong> en el SQL Editor de Supabase.</div>}
+        {loading ? <div className="management-loading-inline"><Loader2 size={19} className="management-spin" /> Cargando movimientos…</div> : movements.length ? (
           <div className="management-movement-list">
-            {purchases.map(purchase => {
-              const open = openId === purchase.id;
-              const units = purchase.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+            {movements.map(movement => {
+              const open = openId === movement.id;
+              const isPurchase = movement.kind === 'purchase';
+              const units = isPurchase ? movement.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0) : movement.quantityAdded;
               return (
-                <article className={`management-movement ${open ? 'is-open' : ''}`} key={purchase.id}>
-                  <button type="button" className="management-movement-summary" onClick={() => setOpenId(open ? '' : purchase.id)} aria-expanded={open}>
-                    <span className="management-movement-icon"><ShoppingCart size={18} /></span>
-                    <span className="management-movement-copy"><strong>Compra · {money(purchase.total)}</strong><small>{dateTime(purchase.at)} · {number(units)} unidades</small></span>
-                    <span className="management-movement-total">{money(purchase.total)}</span>
+                <article className={`management-movement ${open ? 'is-open' : ''}`} key={movement.id}>
+                  <button type="button" className="management-movement-summary" onClick={() => setOpenId(open ? '' : movement.id)} aria-expanded={open}>
+                    <span className={`management-movement-icon ${isPurchase ? '' : 'stock'}`}>{isPurchase ? <ShoppingCart size={18} /> : <PackagePlus size={18} />}</span>
+                    <span className="management-movement-copy"><strong>{isPurchase ? `Compra · ${money(movement.total)}` : `Stock ingresado · ${movement.name}`}</strong><small>{dateTime(movement.at)} · {isPurchase ? `${number(units)} unidades` : `+${number(units)} unidades · stock actual ${number(movement.newStock)}`}</small></span>
+                    <span className="management-movement-total">{isPurchase ? money(movement.total) : `+${number(units)} u.`}</span>
                     <ChevronRight size={18} className="management-movement-chevron" />
                   </button>
-                  {open && <div className="management-movement-detail">{purchase.items.map((item, index) => <div className="management-movement-line" key={`${item.barcode}-${index}`}><span>{item.name} <small>×{item.qty}</small></span><strong>{money(Number(item.price) * Number(item.qty))}</strong></div>)}</div>}
+                  {open && (isPurchase
+                    ? <div className="management-movement-detail">{movement.items.map((item, index) => <div className="management-movement-line" key={`${item.barcode}-${index}`}><span>{item.name} <small>×{item.qty}</small></span><strong>{money(Number(item.price) * Number(item.qty))}</strong></div>)}</div>
+                    : <div className="management-movement-detail"><div className="management-movement-line"><span>{movement.name} <small>EAN {movement.barcode}</small></span><strong>Stock {number(movement.previousStock)} → {number(movement.newStock)}</strong></div></div>)}
                 </article>
               );
             })}
           </div>
-        ) : <div className="management-empty"><ArrowDownUp size={24} /><strong>Todavía no hay movimientos</strong><span>Las compras finalizadas aparecerán acá.</span></div>}
+        ) : <div className="management-empty"><ArrowDownUp size={24} /><strong>Todavía no hay movimientos</strong><span>Los ingresos de stock y las compras finalizadas aparecerán acá.</span></div>}
       </section>
     </>
   );
 }
 
-function SettingsPage({ onSales, onLogout }) {
+function SettingsPage({ onSales, onLogout, theme, onThemeChange }) {
   return (
     <>
       <div className="management-page-heading"><div><span className="management-eyebrow">Preferencias</span><h1>Configuración</h1><p>Acceso y conexión de CR Perfumería.</p></div></div>
       <section className="management-settings-grid">
+        <article className="management-panel management-settings-card">
+          <span className="management-settings-icon"><Sun size={21} /></span><span className="management-eyebrow">Apariencia</span>
+          <h2>Modo claro u oscuro</h2><p>Elegí el aspecto visual para los modos venta y gestión.</p>
+          <ThemePicker theme={theme} onChange={onThemeChange} />
+        </article>
         <article className="management-panel management-settings-card">
           <span className="management-settings-icon"><Store size={21} /></span><span className="management-eyebrow">Datos del local</span>
           <h2>Base de datos conectada</h2><p>Inventario, precios y movimientos se guardan en Supabase y se comparten con el modo venta.</p>
@@ -280,13 +292,13 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
   );
 }
 
-function ManagementShell({ catalog, section, setSection, purchases, loadingPurchases, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout }) {
+function ManagementShell({ catalog, section, setSection, movements, loadingMovements, stockTrackingAvailable, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout, theme, onThemeChange }) {
   const active = SECTIONS.find(item => item.id === section) || SECTIONS[0];
   const ActiveIcon = active.icon;
   return (
-    <div className="management-app">
+    <div className={`management-app ${theme === 'light' ? 'theme-light' : ''}`}>
       <aside className="management-sidebar">
-        <a href="/gestion" className="management-brand-link"><Logo /></a>
+        <a href="/gestion" className="management-brand-link" onClick={event => { event.preventDefault(); setSection('home'); }}><Logo /></a>
         <div className="management-sidebar-label">LOCAL</div>
         <nav className="management-sidebar-nav" aria-label="Secciones de gestión">
           {SECTIONS.map(item => {
@@ -310,21 +322,21 @@ function ManagementShell({ catalog, section, setSection, purchases, loadingPurch
         <div className="management-content">
           {section === 'home' && <Dashboard catalog={catalog} onSection={setSection} onEdit={onEdit} />}
           {section === 'products' && <ProductsPage catalog={catalog} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} deletingBarcode={deletingBarcode} />}
-          {section === 'movements' && <MovementsPage purchases={purchases} loading={loadingPurchases} />}
-          {section === 'settings' && <SettingsPage onSales={onSales} onLogout={onLogout} />}
+          {section === 'movements' && <MovementsPage movements={movements} loading={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} />}
+          {section === 'settings' && <SettingsPage onSales={onSales} onLogout={onLogout} theme={theme} onThemeChange={onThemeChange} />}
         </div>
       </main>
     </div>
   );
 }
 
-export default function ManagementApp() {
+export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}, onSales = () => {}, onExit = () => {} }) {
   const mobile = typeof navigator !== 'undefined' && (navigator.userAgentData?.mobile || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.matchMedia('(max-width: 760px)').matches);
   const [status, setStatus] = useState(mobile ? 'mobile' : 'loading');
   const [catalog, setCatalog] = useState([]);
-  const [purchases, setPurchases] = useState([]);
-  const [purchasesLoaded, setPurchasesLoaded] = useState(false);
-  const [loadingPurchases, setLoadingPurchases] = useState(false);
+  const [movements, setMovements] = useState([]);
+  const [loadingMovements, setLoadingMovements] = useState(true);
+  const [stockTrackingAvailable, setStockTrackingAvailable] = useState(null);
   const [section, setSection] = useState('home');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -348,7 +360,8 @@ export default function ManagementApp() {
     try { payload = await response.json(); } catch { }
     if (response.status === 401) {
       setCatalog([]);
-      setPurchases([]);
+      setMovements([]);
+      setStockTrackingAvailable(null);
       setStatus('locked');
       setMessage('La sesión terminó. Ingresá la clave del local de nuevo.');
     }
@@ -381,15 +394,28 @@ export default function ManagementApp() {
   }, [request, status]);
 
   useEffect(() => {
-    if (status !== 'ready' || section !== 'movements' || purchasesLoaded) return undefined;
     let active = true;
-    setLoadingPurchases(true);
-    request('/api/shop/purchases')
-      .then(data => { if (active) { setPurchases(data.purchases || []); setPurchasesLoaded(true); } })
-      .catch(error => { if (active) setToast(error.message); })
-      .finally(() => { if (active) setLoadingPurchases(false); });
-    return () => { active = false; };
-  }, [purchasesLoaded, request, section, status]);
+    let pending = false;
+    const refresh = async () => {
+      if (!active || status !== 'ready' || document.visibilityState !== 'visible' || pending) return;
+      pending = true;
+      try {
+        const [state, activity] = await Promise.all([request('/api/shop/state'), request('/api/shop/movements')]);
+        if (active) {
+          setCatalog(state.catalog || []);
+          setMovements(activity.movements || []);
+          setStockTrackingAvailable(activity.stockTrackingAvailable);
+          setLoadingMovements(false);
+        }
+      } catch { }
+      finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 5000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [request, status]);
 
   const login = async event => {
     event.preventDefault();
@@ -409,7 +435,7 @@ export default function ManagementApp() {
 
   const logout = async () => {
     try { await fetch('/api/shop/session', { method: 'DELETE', cache: 'no-store' }); } catch { }
-    window.location.assign('/');
+    onExit();
   };
 
   const openEditor = product => {
@@ -447,13 +473,13 @@ export default function ManagementApp() {
     } finally { setDeletingBarcode(''); }
   };
 
-  if (mobile) return <MobileNotice />;
-  if (status === 'loading') return <main className="management-loading"><Logo /><span className="management-loader-ring"><Loader2 size={30} className="management-spin" /></span><p>Conectando con los datos del local…</p></main>;
-  if (status !== 'ready') return <EntryPanel password={password} setPassword={setPassword} onSubmit={login} busy={busy} message={message} onSales={() => window.location.assign('/')} />;
+  if (mobile) return <MobileNotice theme={theme} />;
+  if (status === 'loading') return <main className={`management-loading ${theme === 'light' ? 'theme-light' : ''}`}><Logo /><span className="management-loader-ring"><Loader2 size={30} className="management-spin" /></span><p>Conectando con los datos del local…</p></main>;
+  if (status !== 'ready') return <EntryPanel password={password} setPassword={setPassword} onSubmit={login} busy={busy} message={message} onSales={onSales} theme={theme} />;
 
   return (
     <>
-      <ManagementShell catalog={catalog} section={section} setSection={setSection} purchases={purchases} loadingPurchases={loadingPurchases} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={() => window.location.assign('/')} onLogout={logout} />
+      <ManagementShell catalog={catalog} section={section} setSection={setSection} movements={movements} loadingMovements={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} />
       {editorOpen && <ProductEditor key={editorProduct?.barcode || 'new-product'} product={editorProduct} busy={savingProduct} error={editorError} setError={setEditorError} onClose={() => setEditorOpen(false)} onSave={saveProduct} />}
       {toast && <div className="management-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
     </>

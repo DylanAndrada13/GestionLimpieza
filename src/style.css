@@ -1216,6 +1216,7 @@ img { max-width: 100%; }
   text-align: left;
 }
 .profile-row.static { cursor: default; }
+.profile-row.appearance-row { cursor: default; }
 .profile-row-icon { width: 37px; height: 37px; border-radius: 11px; background: #efeafc; color: #5b32cd; display: grid; place-items: center; flex: none; }
 .profile-row > span:nth-child(2) { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .profile-row strong { color: var(--ink); font-size: 12px; font-weight: 500; }
@@ -1579,7 +1580,7 @@ img { max-width: 100%; }
 
 .startup-intro {
   position: fixed;
-  z-index: 130;
+  z-index: 1000;
   inset: 0;
   display: grid;
   place-items: center;
@@ -1606,6 +1607,71 @@ img { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .startup-intro, .startup-intro-content { animation-duration: 0.01ms; }
 }
+
+/* Quantity controls and optional light appearance */
+.app-shell:not(.theme-light) .qty-control { border: 1px solid #59451e; background: #241e13; }
+.app-shell:not(.theme-light) .qty-control button { color: #e2b94e; }
+.app-shell:not(.theme-light) .qty-control span { color: #f5ead1; }
+.app-shell:not(.theme-light) .qty-control button:disabled { color: #746747; }
+
+html[data-theme='light'], html[data-theme='light'] body { color-scheme: light; background: #f5f2ea; color: #282316; }
+.app-shell.theme-light { --bg: #f5f2ea; --bg-soft: #fffdf8; --ink: #282316; --ink-soft: #554c3b; --muted: #817969; --line: rgba(145, 113, 51, .2); --white: #fffdf8; --shadow-card: 0 9px 24px rgba(43, 34, 15, .08); background: #f5f2ea; color: #282316; }
+.app-shell.theme-light .app-body, .app-shell.theme-light .home-sheet { background: #f5f2ea; color: #282316; }
+.app-shell.theme-light .home-hero, .app-shell.theme-light .compact-header { background: linear-gradient(145deg, #fffdf8, #f0e8d6 80%, #ead9ad); }
+.app-shell.theme-light .home-hero { border-bottom-color: #d2ae59; }
+.app-shell.theme-light .brand-lockup { color: #4f3a12; }
+.app-shell.theme-light .hero-copy h1, .app-shell.theme-light .page-intro h1, .app-shell.theme-light .purchase-heading h2,
+.app-shell.theme-light .product-summary-copy h1, .app-shell.theme-light .stock-copy strong, .app-shell.theme-light .price-copy strong,
+.app-shell.theme-light .empty-state strong, .app-shell.theme-light .profile-row strong, .app-shell.theme-light .profile-card strong,
+.app-shell.theme-light .confirm-dialog h2, .app-shell.theme-light .install-dialog h2, .app-shell.theme-light .not-found h1,
+.app-shell.theme-light .section-heading, .app-shell.theme-light .history-copy strong, .app-shell.theme-light .purchase-line strong,
+.app-shell.theme-light .search-result-copy strong { color: #282316; }
+.app-shell.theme-light .hero-copy p, .app-shell.theme-light .page-intro p, .app-shell.theme-light .product-summary-copy p,
+.app-shell.theme-light .profile-row small, .app-shell.theme-light .empty-state p, .app-shell.theme-light .not-found p { color: #766e5f; }
+.app-shell.theme-light .home-sheet { border-color: rgba(183, 142, 48, .44); }
+.app-shell.theme-light .scan-hero-card { color: #63480d; background: linear-gradient(145deg, #fffaf0, #f1e2bd); box-shadow: inset 0 0 0 1px rgba(183, 142, 48, .14), 0 8px 24px rgba(65, 46, 9, .11); }
+.app-shell.theme-light .scan-hero-card strong, .app-shell.theme-light .scan-hero-card > span:last-child { color: #34280f; }
+.app-shell.theme-light .action-card { color: #705415; background: linear-gradient(145deg, #fffdf9, #f1eadb); border-color: rgba(183, 142, 48, .32); box-shadow: 0 7px 20px rgba(43, 34, 15, .07); }
+.app-shell.theme-light .action-card strong { color: #282316; }
+.app-shell.theme-light .bottom-nav { background: rgba(255, 253, 248, .97); border-top-color: rgba(183, 142, 48, .3); box-shadow: 0 -8px 24px rgba(43, 34, 15, .08); }
+.app-shell.theme-light .nav-item { color: #7f7768; }
+.app-shell.theme-light .nav-item.is-active { color: #8a6519; }
+.app-shell.theme-light .back-button { color: #775714; background: #f1eadb; }
+.app-shell.theme-light .header-action { background: #c59c45; color: #201806; }
+.app-shell.theme-light .empty-state, .app-shell.theme-light .cart-item, .app-shell.theme-light .purchase-summary,
+.app-shell.theme-light .history-row, .app-shell.theme-light .profile-card, .app-shell.theme-light .profile-stats,
+.app-shell.theme-light .profile-row, .app-shell.theme-light .search-result, .app-shell.theme-light .stock-pill,
+.app-shell.theme-light .qty-picker, .app-shell.theme-light .purchase-preview, .app-shell.theme-light .inline-search,
+.app-shell.theme-light .barcode-chip, .app-shell.theme-light .source-chip { background-color: #fffdf8; border-color: rgba(145, 113, 51, .18); color: #282316; }
+.app-shell.theme-light .cart-summary, .app-shell.theme-light .purchase-card, .app-shell.theme-light .mini-stats div,
+.app-shell.theme-light .inventory-row, .app-shell.theme-light .search-tip, .app-shell.theme-light .profile-stats div { background: #fffdf8; color: #282316; border-color: rgba(145, 113, 51, .18); }
+.app-shell.theme-light .purchase-calendar, .app-shell.theme-light .history-icon, .app-shell.theme-light .search-tip-icon,
+.app-shell.theme-light .edit-button, .app-shell.theme-light .search-field button, .app-shell.theme-light .today-pill,
+.app-shell.theme-light .shared-tag { background: #f3ead4; color: #765612; }
+.app-shell.theme-light .inventory-copy small, .app-shell.theme-light .purchase-amount, .app-shell.theme-light .shared-tag,
+.app-shell.theme-light .search-result-price { color: #806018; }
+.app-shell.theme-light .stock-copy > span, .app-shell.theme-light .price-copy > span, .app-shell.theme-light .price-copy small,
+.app-shell.theme-light .history-copy > span, .app-shell.theme-light .purchase-date small, .app-shell.theme-light .purchase-line,
+.app-shell.theme-light .profile-stats span { color: #756e60; }
+.app-shell.theme-light .qty-control { border: 1px solid rgba(145, 113, 51, .22); background: #f2ead9; }
+.app-shell.theme-light .qty-control button { color: #806018; }
+.app-shell.theme-light .qty-control span { color: #282316; }
+.app-shell.theme-light .profile-section h2 { color: #756a52; }
+.app-shell.theme-light .profile-row-icon, .app-shell.theme-light .product-thumb, .app-shell.theme-light .empty-icon,
+.app-shell.theme-light .form-icon, .app-shell.theme-light .dialog-icon, .app-shell.theme-light .confirm-icon { background: #f3ead4; color: #806018; }
+.app-shell.theme-light .field input, .app-shell.theme-light .input-shell, .app-shell.theme-light .manual-form input,
+.app-shell.theme-light .search-input, .app-shell.theme-light .filter-input, .app-shell.theme-light .search-field input {
+  background: #fffdf8; border-color: rgba(145, 113, 51, .3); color: #282316;
+}
+.app-shell.theme-light .field > span { color: #806018; }
+.app-shell.theme-light .filter-chip, .app-shell.theme-light .filter-button { border-color: rgba(145, 113, 51, .25); background: #fffdf8; color: #554c3b; }
+.app-shell.theme-light .filter-chip.active, .app-shell.theme-light .filter-button.active { background: #f1e6c8; color: #65490f; border-color: #c7a352; }
+.app-shell.theme-light .secondary-cta { background: #fffaf0; border-color: #cbb16f; color: #694f1b; }
+.app-shell.theme-light .profile-pill { background: #f3ead4; color: #765612; }
+.app-shell.theme-light .qty-stepper { background: #f2ead9; border: 1px solid rgba(145, 113, 51, .24); }
+.app-shell.theme-light .qty-stepper strong { color: #282316; }
+.app-shell.theme-light .qty-stepper button { color: #806018; }
+.app-shell.theme-light .qty-stepper button:disabled { color: #b8ad93; }
 
 /* ------------------------------------------------------------------ */
 /* Identidad CR: perfumería y limpieza                                 */

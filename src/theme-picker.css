@@ -1,0 +1,4 @@
+.theme-picker { display: inline-flex; flex: none; gap: 3px; padding: 3px; border: 1px solid rgba(196, 153, 62, .28); border-radius: 11px; background: rgba(30, 25, 15, .7); }
+.theme-picker button { min-height: 33px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: #aaa18e; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+.theme-picker button.active { background: #d7b354; color: #201808; box-shadow: 0 2px 8px rgba(175, 132, 39, .18); }
+.theme-picker button:focus-visible { outline: 2px solid #d7b354; outline-offset: 2px; }

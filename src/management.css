@@ -148,12 +148,15 @@
 .management-empty svg { margin-bottom: 4px; color: #bb9846; }
 
 .management-movements-panel { padding: 19px 22px; }
+.management-movement-setup { margin-top: 14px; padding: 11px 13px; border: 1px solid rgba(215, 177, 78, .24); border-radius: 10px; background: rgba(132, 92, 24, .14); color: #d4c08d; font-size: 11px; line-height: 1.5; }
+.management-movement-setup strong { color: #f0d17d; font-weight: 600; }
 .management-count-pill { padding: 6px 9px; border: 1px solid rgba(212, 173, 76, .2); border-radius: 99px; color: #c6ab66; background: #1b170e; font-size: 10px; }
 .management-movement-list { display: flex; flex-direction: column; }
 .management-movement { border-bottom: 1px solid rgba(213, 174, 78, .12); }
 .management-movement:last-child { border-bottom: 0; }
 .management-movement-summary { width: 100%; min-height: 70px; display: flex; align-items: center; gap: 13px; padding: 11px 4px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .management-movement-icon { width: 40px; height: 40px; display: grid; place-items: center; flex: none; border: 1px solid rgba(211, 172, 72, .22); border-radius: 11px; background: #211a0e; color: #d7b352; }
+.management-movement-icon.stock { border-color: rgba(114, 160, 101, .25); background: #172016; color: #8db681; }
 .management-movement-copy { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .management-movement-copy strong { color: #e8dfd0; font-size: 12px; font-weight: 600; }
 .management-movement-copy small { color: #938a79; font-size: 10px; }
@@ -236,3 +239,117 @@
 @media (prefers-reduced-motion: reduce) {
   .management-app *, .management-app *::before, .management-app *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.management-app.theme-light {
+  --mg-bg: #f5f2ea;
+  --mg-panel: #fffdf8;
+  --mg-panel-raised: #f4efe3;
+  --mg-line: rgba(145, 113, 51, .2);
+  --mg-text: #282316;
+  --mg-muted: #756d5d;
+  background: radial-gradient(ellipse at 76% 0%, rgba(215, 179, 84, .13), transparent 34%), var(--mg-bg);
+  color: var(--mg-text);
+}
+.management-app.theme-light .management-sidebar { border-color: var(--mg-line); background: linear-gradient(180deg, #fffdf8, #f2ecdc 74%); }
+.management-app.theme-light .management-logo, .management-app.theme-light .management-sidebar-foot strong { color: #59400e; }
+.management-app.theme-light .management-sidebar-label, .management-app.theme-light .management-sidebar-foot small { color: #887954; }
+.management-app.theme-light .management-nav-item { color: #625b4d; }
+.management-app.theme-light .management-nav-item svg { color: #967329; }
+.management-app.theme-light .management-nav-item:hover { color: #312712; background: rgba(186, 143, 52, .09); }
+.management-app.theme-light .management-nav-item.active { color: #5f450f; border-color: rgba(170, 128, 35, .22); background: linear-gradient(110deg, rgba(210, 174, 83, .22), rgba(245, 232, 196, .55)); box-shadow: inset 3px 0 #bd963b; }
+.management-app.theme-light .management-nav-item.active svg { color: #89671c; }
+.management-app.theme-light .management-mode-switch { border-color: rgba(170, 128, 35, .24); background: linear-gradient(130deg, #f0e5ca, #fffaf0); color: #765612; }
+.management-app.theme-light .management-mode-switch strong { color: #423313; }
+.management-app.theme-light .management-mode-switch small { color: #867548; }
+.management-app.theme-light .management-sidebar-logout { color: #6d6250; }
+.management-app.theme-light .management-sidebar-logout:hover { color: #aa4c3b; background: rgba(178, 68, 54, .08); }
+.management-app.theme-light .management-sidebar-foot { border-color: rgba(145, 113, 51, .17); }
+.management-app.theme-light .management-user-avatar, .management-app.theme-light .management-topbar-avatar { border-color: rgba(170, 128, 35, .3); background: #f0e5ca; color: #705213; }
+.management-app.theme-light .management-topbar { border-color: var(--mg-line); background: rgba(255, 253, 248, .84); }
+.management-app.theme-light .management-crumb, .management-app.theme-light .management-topbar-right { color: #786f5e; }
+.management-app.theme-light .management-crumb strong { color: #342b19; }
+.management-app.theme-light .management-crumb > svg:first-child { color: #9a7625; }
+.management-app.theme-light .management-topbar-divider { background: rgba(145, 113, 51, .2); }
+.management-app.theme-light .management-content { scrollbar-color: #cfbd91 #f2ecdc; }
+.management-app.theme-light .management-page-heading h1 { color: #292316; }
+.management-app.theme-light .management-page-heading p { color: #756d5d; }
+.management-app.theme-light .management-date { border-color: var(--mg-line); color: #6d5b31; background: #fffaf0; }
+.management-app.theme-light .management-stat { border-color: rgba(145, 113, 51, .2); background: linear-gradient(135deg, #fffdf8, #f1ead9); box-shadow: 0 7px 20px rgba(43, 34, 15, .06); }
+.management-app.theme-light .management-stat-icon { border-color: rgba(170, 128, 35, .25); background: #f0e5ca; color: #85631b; }
+.management-app.theme-light .management-stat-copy small { color: #716753; }
+.management-app.theme-light .management-stat-copy strong { color: #2c2518; }
+.management-app.theme-light .management-stat-copy em { color: #817762; }
+.management-app.theme-light .management-stat.green .management-stat-icon { border-color: rgba(115, 164, 114, .28); background: #e9f1e2; color: #54784b; }
+.management-app.theme-light .management-stat.warning .management-stat-icon { border-color: rgba(200, 112, 69, .25); background: #fae9dc; color: #a75e3e; }
+.management-app.theme-light .management-panel { border-color: var(--mg-line); background: linear-gradient(145deg, #fffdf8, #f9f6ef); box-shadow: 0 8px 24px rgba(43, 34, 15, .055); }
+.management-app.theme-light .management-panel-heading { border-color: rgba(145, 113, 51, .15); }
+.management-app.theme-light .management-panel-heading h2, .management-app.theme-light .management-settings-card h2 { color: #382f1d; }
+.management-app.theme-light .management-link { color: #806018; }
+.management-app.theme-light .management-low-row { border-color: rgba(145, 113, 51, .13); }
+.management-app.theme-light .management-low-row:hover .management-low-copy strong { color: #765612; }
+.management-app.theme-light .management-product-thumb { border-color: rgba(145, 113, 51, .16); background: #f2ead9; color: #806018; }
+.management-app.theme-light .management-low-copy strong, .management-app.theme-light .management-movement-copy strong { color: #332b1c; }
+.management-app.theme-light .management-low-copy small, .management-app.theme-light .management-movement-copy small { color: #7c725f; }
+.management-app.theme-light .management-stock-count { color: #755817; }
+.management-app.theme-light .management-stock-count.is-empty { color: #ad5140; }
+.management-app.theme-light .management-inventory-ok strong { color: #36412f; }
+.management-app.theme-light .management-inventory-ok small { color: #718069; }
+.management-app.theme-light .management-inventory-ok > span { border-color: rgba(114, 167, 115, .25); background: #e8f0e3; color: #64825b; }
+.management-app.theme-light .management-side-card { background: radial-gradient(ellipse at 95% 0%, rgba(204, 158, 52, .13), transparent 54%), linear-gradient(145deg, #fffaf0, #f0e6cd 76%); }
+.management-app.theme-light .management-side-icon { border-color: rgba(170, 128, 35, .25); background: #eee0bc; color: #775817; }
+.management-app.theme-light .management-side-card h2 { color: #3d3016; }
+.management-app.theme-light .management-side-card p { color: #70654f; }
+.management-app.theme-light .management-secondary { border-color: rgba(145, 113, 51, .26); background: #fffaf0; color: #705213; }
+.management-app.theme-light .management-products-toolbar, .management-app.theme-light .management-table-footer { border-color: rgba(145, 113, 51, .15); }
+.management-app.theme-light .management-search, .management-app.theme-light .management-filters { border-color: rgba(145, 113, 51, .22); background: #fffdf8; color: #806018; }
+.management-app.theme-light .management-search input { color: #312a1d; }
+.management-app.theme-light .management-search input::placeholder { color: #968c78; }
+.management-app.theme-light .management-filters button { color: #6d6556; }
+.management-app.theme-light .management-filters button.active { background: #f1e6c8; color: #65490f; }
+.management-app.theme-light .management-table th { border-color: rgba(145, 113, 51, .15); color: #766d5c; }
+.management-app.theme-light .management-table td { border-color: rgba(145, 113, 51, .11); color: #4f4738; }
+.management-app.theme-light .management-table tbody tr:hover { background: rgba(186, 143, 52, .05); }
+.management-app.theme-light .management-table-product strong { color: #312a1d; }
+.management-app.theme-light .management-table-product small, .management-app.theme-light .management-code { color: #756c5c !important; }
+.management-app.theme-light .management-price { color: #795b18 !important; }
+.management-app.theme-light .management-status.ok { border-color: rgba(93, 139, 81, .2); background: #edf4e9; color: #59764f; }
+.management-app.theme-light .management-status.low { border-color: rgba(170, 128, 35, .22); background: #f7eed8; color: #806018; }
+.management-app.theme-light .management-status.empty { border-color: rgba(170, 76, 59, .2); background: #f9e9e4; color: #a54f40; }
+.management-app.theme-light .management-icon-button { border-color: rgba(145, 113, 51, .2); background: #f4ecd9; color: #765817; }
+.management-app.theme-light .management-icon-button:hover { border-color: rgba(145, 113, 51, .45); background: #eee1bf; }
+.management-app.theme-light .management-icon-button.delete { border-color: rgba(193, 103, 79, .2); background: #f8e9e4; color: #a64f40; }
+.management-app.theme-light .management-table-footer { color: #796f5d; }
+.management-app.theme-light .management-empty strong { color: #3b3221; }
+.management-app.theme-light .management-empty span { color: #786e5c; }
+.management-app.theme-light .management-count-pill { border-color: var(--mg-line); color: #745819; background: #f6eedb; }
+.management-app.theme-light .management-movement-setup { border-color: rgba(145, 113, 51, .2); background: #f7eed8; color: #655637; }
+.management-app.theme-light .management-movement-setup strong { color: #765612; }
+.management-app.theme-light .management-movement { border-color: rgba(145, 113, 51, .13); }
+.management-app.theme-light .management-movement-summary { color: #332b1c; }
+.management-app.theme-light .management-movement-icon { border-color: rgba(170, 128, 35, .2); background: #f3ead6; color: #806018; }
+.management-app.theme-light .management-movement-icon.stock { border-color: rgba(114, 160, 101, .22); background: #eaf1e4; color: #5f8055; }
+.management-app.theme-light .management-movement-total { color: #795b18; }
+.management-app.theme-light .management-movement-detail { border-color: rgba(145, 113, 51, .3); background: #f6f1e5; }
+.management-app.theme-light .management-movement-line { color: #4e4534; }
+.management-app.theme-light .management-movement-line small { color: #82745a; }
+.management-app.theme-light .management-movement-line strong { color: #765817; }
+.management-app.theme-light .management-settings-icon { border-color: rgba(170, 128, 35, .22); background: #f1e7d0; color: #765817; }
+.management-app.theme-light .management-settings-card p { color: #756d5d; }
+.management-app.theme-light .management-connection { border-color: rgba(87, 141, 81, .18); background: #edf4e9; color: #5e7e54; }
+.management-app.theme-light .management-logout-button { border-color: rgba(193, 103, 79, .23); background: #f8e9e4; color: #a64f40; }
+.management-app.theme-light .management-settings-grid .theme-picker { background: #fffaf0; }
+.management-entry.theme-light, .management-mobile.theme-light, .management-loading.theme-light { background: radial-gradient(ellipse at 50% 0%, rgba(210, 174, 83, .18), transparent 55%), #f5f2ea; color: #282316; }
+.management-entry.theme-light .management-entry-card, .management-mobile.theme-light .management-mobile-card { border-color: rgba(145, 113, 51, .24); background: linear-gradient(150deg, #fffdf8, #f3ecdc); box-shadow: 0 24px 80px rgba(43, 34, 15, .12); }
+.management-entry.theme-light .management-logo, .management-mobile.theme-light .management-logo { color: #59400e; }
+.management-entry.theme-light .management-entry-card h1, .management-mobile.theme-light .management-mobile-card h1 { color: #292316; }
+.management-entry.theme-light .management-entry-card > p, .management-mobile.theme-light .management-mobile-card p { color: #756d5d; }
+.management-entry.theme-light .management-entry-card form label { color: #806018; }
+.management-entry.theme-light .management-entry-card form input { border-color: rgba(145, 113, 51, .3); background: #fffdf8; color: #282316; }
+.management-entry.theme-light .management-return { color: #705213; }
+.management-mobile.theme-light .management-mobile-icon { border-color: rgba(145, 113, 51, .22); background: #f0e5ca; color: #806018; }
+.management-mobile.theme-light .management-mobile-card p strong { color: #765612; }
+.management-loading.theme-light > p { color: #756d5d; }
+
+.theme-light .theme-picker { border-color: rgba(145, 113, 51, .25); background: #f4eedf; }
+.theme-light .theme-picker button { color: #766d5b; }
+.theme-light .theme-picker button.active { background: #d7b354; color: #201808; }

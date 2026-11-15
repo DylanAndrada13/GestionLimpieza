@@ -191,6 +191,50 @@ create table if not exists public.shop_purchases (
 
 create index if not exists shop_purchases_occurred_at_idx on public.shop_purchases(occurred_at desc);
 
+-- Stock received through product registration/updates. Purchases remain in
+-- shop_purchases, so stock decreases from sales are not duplicated here.
+create table if not exists public.shop_stock_movements (
+  id bigint generated always as identity primary key,
+  barcode text not null check (barcode ~ '^[0-9]{8,14}$'),
+  product_name text not null,
+  previous_stock integer not null default 0 check (previous_stock >= 0),
+  new_stock integer not null check (new_stock >= 0),
+  quantity_added integer not null check (quantity_added > 0),
+  occurred_at timestamptz not null default now()
+);
+
+create index if not exists shop_stock_movements_occurred_at_idx on public.shop_stock_movements(occurred_at desc);
+
+create or replace function public.log_shop_stock_received()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_previous integer := 0;
+  v_added integer;
+begin
+  if tg_op = 'UPDATE' then
+    v_previous := old.stock;
+  end if;
+  v_added := new.stock - v_previous;
+  if v_added > 0 then
+    insert into public.shop_stock_movements(barcode, product_name, previous_stock, new_stock, quantity_added)
+      values (new.barcode, new.name, v_previous, new.stock, v_added);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists shop_products_stock_received on public.shop_products;
+create trigger shop_products_stock_received
+  after insert or update of stock on public.shop_products
+  for each row execute function public.log_shop_stock_received();
+
+revoke all on function public.log_shop_stock_received() from public, anon, authenticated;
+grant execute on function public.log_shop_stock_received() to service_role;
+
 create table if not exists public.shop_scan_history (
   barcode text primary key check (barcode ~ '^[0-9]{8,14}$'),
   scanned_at timestamptz not null default now(),
@@ -203,9 +247,11 @@ create index if not exists shop_scan_history_scanned_at_idx on public.shop_scan_
 alter table public.shop_products enable row level security;
 alter table public.shop_cart enable row level security;
 alter table public.shop_purchases enable row level security;
+alter table public.shop_stock_movements enable row level security;
 alter table public.shop_scan_history enable row level security;
-revoke all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_scan_history from anon, authenticated;
-grant all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_scan_history to service_role;
+revoke all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_stock_movements, public.shop_scan_history from anon, authenticated;
+grant all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_stock_movements, public.shop_scan_history to service_role;
+grant usage, select on sequence public.shop_stock_movements_id_seq to service_role;
 
 create or replace function public.reset_shop_inventory()
 returns void
