@@ -69,9 +69,9 @@ function LogoMark({ size = 34 }) {
 
 function Brand({ onClick, small = false }) {
   return (
-    <button type="button" className={`brand-lockup ${small ? 'is-small' : ''}`} onClick={onClick} aria-label="Ir al inicio de Perfumería y Limpieza CR">
+    <button type="button" className={`brand-lockup ${small ? 'is-small' : ''}`} onClick={onClick} aria-label="Ir al inicio de CR Perfumería">
       <LogoMark size={small ? 29 : 34} />
-      <span>Perfumería <i>&</i> Limpieza</span>
+      <span>CR Perfumería</span>
     </button>
   );
 }
@@ -94,6 +94,17 @@ function DatabaseGate({ password, onPasswordChange, onSubmit, message, busy, con
           </button>
         </form>
       </main>
+    </div>
+  );
+}
+
+function StartupIntro() {
+  return (
+    <div className="startup-intro" aria-hidden="true">
+      <div className="startup-intro-content">
+        <img src="/nuevologo.jpg" alt="" />
+        <strong>CR Perfumería</strong>
+      </div>
     </div>
   );
 }
@@ -249,7 +260,7 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
           <Download size={19} />
           <span>Instalar la app</span>
         </button>
-        <p className="drawer-foot">Perfumería &amp; Limpieza CR</p>
+        <p className="drawer-foot">CR Perfumería</p>
       </aside>
     </div>
   );
@@ -926,7 +937,7 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
       <section className="profile-card">
         <div className="profile-avatar"><LogoMark size={48} /></div>
         <div>
-          <strong>Perfumería &amp; Limpieza</strong>
+          <strong>CR Perfumería</strong>
           <span>Gestión de productos para tu local</span>
         </div>
         <span className="profile-pill">APP</span>
@@ -956,7 +967,7 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
         <p>Este botón elimina todos los productos registrados, incluidos sus precios y stock.</p>
         <button type="button" className="danger-button" onClick={() => setConfirming(true)}><Trash2 size={17} /> Reiniciar inventario</button>
       </section>
-      <p className="version-note">Perfumería &amp; Limpieza · versión 1.0</p>
+      <p className="version-note">CR Perfumería · versión 1.0</p>
 
       {confirming && (
         <div className="modal-backdrop" onClick={() => setConfirming(false)}>
@@ -1185,6 +1196,7 @@ export default function App() {
   const [databaseMessage, setDatabaseMessage] = useState('');
   const [gatePassword, setGatePassword] = useState('');
   const [shopPassword, setShopPassword] = useState('');
+  const [showIntro, setShowIntro] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -1581,6 +1593,11 @@ export default function App() {
   }, [applyShopState]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
+  useEffect(() => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const timer = setTimeout(() => setShowIntro(false), reducedMotion ? 80 : 1900);
+    return () => clearTimeout(timer);
+  }, []);
 
   const install = useCallback(async () => {
     if (!installPrompt) { setShowInstallHelp(true); return; }
@@ -1715,14 +1732,17 @@ export default function App() {
 
   if (databaseStatus !== 'ready') {
     return (
-      <DatabaseGate
-        password={gatePassword}
-        onPasswordChange={setGatePassword}
-        onSubmit={connectDatabase}
-        message={databaseMessage}
-        busy={databaseBusy || databaseStatus === 'loading'}
-        configured={databaseConfigured}
-      />
+      <>
+        <DatabaseGate
+          password={gatePassword}
+          onPasswordChange={setGatePassword}
+          onSubmit={connectDatabase}
+          message={databaseMessage}
+          busy={databaseBusy || databaseStatus === 'loading'}
+          configured={databaseConfigured}
+        />
+        {showIntro && <StartupIntro />}
+      </>
     );
   }
 
@@ -1848,6 +1868,7 @@ export default function App() {
         cartCount={cartCount}
       />
       {showInstallHelp && <InstallDialog onClose={() => setShowInstallHelp(false)} />}
+      {showIntro && <StartupIntro />}
       <Toast
         toast={toast}
         onAction={() => {
