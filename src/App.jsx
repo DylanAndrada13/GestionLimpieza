@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -73,28 +73,14 @@ const cartUnits = (cart) => cart.reduce((sum, item) => sum + (Number(item.qty) |
 const cartAmount = (cart) => cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0);
 
 function LogoMark({ size = 34 }) {
-  const rawId = useId();
-  const gradientId = `drop-${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
-  return (
-    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" className="logo-mark">
-      <defs>
-        <linearGradient id={gradientId} x1="7" y1="4" x2="33" y2="36" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#79e9ff" />
-          <stop offset="0.55" stopColor="#45cdf7" />
-          <stop offset="1" stopColor="#2b9fe7" />
-        </linearGradient>
-      </defs>
-      <path d="M20 2.5S6.5 17.4 6.5 26a13.5 13.5 0 0 0 27 0C33.5 17.4 20 2.5 20 2.5Z" fill={`url(#${gradientId})`} />
-      <path d="M20 30.9c-5.05 0-8.8-3.22-8.8-7.52 0-1.03.2-2.03.57-2.97 1.97 1.78 4.94 2.98 8.23 2.98 2.9 0 5.5-.85 7.38-2.23.29.93.44 1.9.44 2.9 0 4.39-3.75 7.84-8.82 7.84Z" fill="#371a8f" />
-    </svg>
-  );
+  return <img width={size} height={size} src="/nuevologo.jpg" alt="" aria-hidden="true" className="logo-mark" />;
 }
 
 function Brand({ onClick, small = false }) {
   return (
-    <button type="button" className={`brand-lockup ${small ? 'is-small' : ''}`} onClick={onClick} aria-label="Ir al inicio de CleanStock">
+    <button type="button" className={`brand-lockup ${small ? 'is-small' : ''}`} onClick={onClick} aria-label="Ir al inicio de Perfumería y Limpieza CR">
       <LogoMark size={small ? 29 : 34} />
-      <span>CleanStock</span>
+      <span>Perfumería <i>&</i> Limpieza</span>
     </button>
   );
 }
@@ -250,7 +236,7 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
           <Download size={19} />
           <span>Instalar la app</span>
         </button>
-        <p className="drawer-foot">CleanStock · Gestión de productos</p>
+        <p className="drawer-foot">Perfumería &amp; Limpieza CR</p>
       </aside>
     </div>
   );
@@ -281,7 +267,7 @@ function InstallDialog({ onClose }) {
       <section className="install-dialog" role="dialog" aria-modal="true" aria-labelledby="install-title" onClick={event => event.stopPropagation()}>
         <button type="button" className="icon-close" onClick={onClose} aria-label="Cerrar"><X size={19} /></button>
         <div className="dialog-icon"><LogoMark size={38} /></div>
-        <h2 id="install-title">Llevá CleanStock al teléfono</h2>
+        <h2 id="install-title">Llevá la aplicación al teléfono</h2>
         <p>Instalala desde el navegador para abrirla como una app y tener el inventario siempre a mano.</p>
         <div className="install-steps">
           <strong>En iPhone</strong>
@@ -934,7 +920,7 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
       <section className="profile-card">
         <div className="profile-avatar"><LogoMark size={48} /></div>
         <div>
-          <strong>CleanStock</strong>
+          <strong>Perfumería &amp; Limpieza</strong>
           <span>Gestión de productos para tu local</span>
         </div>
         <span className="profile-pill">APP</span>
@@ -955,12 +941,12 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
 
       <section className="profile-section">
         <h2>Aplicación</h2>
-        <button type="button" className="profile-row" onClick={onInstall}><span className="profile-row-icon"><Download size={19} /></span><span><strong>Instalar CleanStock</strong><small>Agregala a la pantalla de inicio</small></span><ChevronRight size={17} /></button>
+        <button type="button" className="profile-row" onClick={onInstall}><span className="profile-row-icon"><Download size={19} /></span><span><strong>Instalar aplicación</strong><small>Agregala a la pantalla de inicio</small></span><ChevronRight size={17} /></button>
         <div className="profile-row static"><span className="profile-row-icon"><ShieldCheck size={19} /></span><span><strong>Datos en este dispositivo</strong><small>El inventario y las compras se guardan localmente.</small></span></div>
       </section>
 
       <button type="button" className="danger-button" onClick={() => setConfirming(true)}><Trash2 size={17} /> Borrar datos del dispositivo</button>
-      <p className="version-note">CleanStock · versión 1.0</p>
+      <p className="version-note">Perfumería &amp; Limpieza · versión 1.0</p>
 
       {confirming && (
         <div className="modal-backdrop" onClick={() => setConfirming(false)}>

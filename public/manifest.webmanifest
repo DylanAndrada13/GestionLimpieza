@@ -1,13 +1,13 @@
 {
-  "name": "CleanStock · Gestión de productos",
-  "short_name": "CleanStock",
-  "description": "Escaneá productos de limpieza, controlá el stock y registrá las compras de tu local.",
+  "name": "Perfumería & Limpieza CR · Gestión del local",
+  "short_name": "Perfumería CR",
+  "description": "Escaneá productos, controlá el stock y registrá las compras de Perfumería y Limpieza CR.",
   "lang": "es-AR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f2f0fb",
-  "theme_color": "#3d1a9e",
+  "background_color": "#0b0a08",
+  "theme_color": "#0b0a08",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }
