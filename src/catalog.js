@@ -1,23 +1,3 @@
-export const CATALOG_KEY = 'cleanstock.catalog.v1';
-export const CART_KEY = 'cleanstock.cart.v1';
-export const PURCHASES_KEY = 'cleanstock.purchases.v1';
-export const HISTORY_KEY = 'cleanstock.history.v1';
-const LEGACY_CATALOG_KEY = 'limpia.catalog.v1';
-const LEGACY_HISTORY_KEY = 'limpia.history.v1';
-
-export const readList = (key) => {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-};
-
-export const writeList = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { }
-};
-
 export const tidy = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
 export const isBarcode = (value) => /^\d{8,14}$/.test(String(value || '').replace(/\s/g, ''));
@@ -99,21 +79,6 @@ export function sanitizeStoredProduct(item) {
   };
 }
 
-export function loadCatalog() {
-  const current = readList(CATALOG_KEY);
-  const source = current.length ? current : readList(LEGACY_CATALOG_KEY);
-  return source.map(sanitizeStoredProduct);
-}
-
-export function loadHistory() {
-  const current = readList(HISTORY_KEY);
-  return current.length ? current : readList(LEGACY_HISTORY_KEY);
-}
-
-function savedProduct(code) {
-  return findLocalProduct(readList(CATALOG_KEY).map(sanitizeStoredProduct), code);
-}
-
 async function lookupSepaBulk(code) {
   const shard = code.slice(-2);
   const response = await fetch(`/data/sepa-cleaning/${shard}.json`, { signal: AbortSignal.timeout(2500) });
@@ -168,10 +133,6 @@ export async function fetchSources(code, onSource = () => {}, onFound = () => {}
     onSource(sourceId, 'found', item);
     onFound(item);
   };
-
-  const local = savedProduct(code);
-  onSource('local', local ? 'found' : 'empty', local);
-  if (local) push(local, 'local');
 
   const checks = [
     (async () => {
@@ -300,16 +261,14 @@ export async function fetchSources(code, onSource = () => {}, onFound = () => {}
 
   await Promise.all(checks);
   const priority = {
-    'Mi inventario': 0,
-    'Catálogo compartido': 1,
-    'Mi catálogo del teléfono': 2,
-    'DDI · catálogo de limpieza': 3,
-    'SEPA · catálogo cargado': 4,
-    'SEPA · Precios Claros': 5,
-    'ez-catalog': 6,
-    'Open Products Facts': 7,
-    'Open Beauty Facts': 8,
-    'UPCitemdb': 9,
+    'Catálogo compartido': 0,
+    'DDI · catálogo de limpieza': 1,
+    'SEPA · catálogo cargado': 2,
+    'SEPA · Precios Claros': 3,
+    'ez-catalog': 4,
+    'Open Products Facts': 5,
+    'Open Beauty Facts': 6,
+    'UPCitemdb': 7,
   };
   return results.sort((a, b) => (priority[a.source] ?? 10) - (priority[b.source] ?? 10));
 }

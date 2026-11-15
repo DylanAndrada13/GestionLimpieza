@@ -13,14 +13,26 @@ Vite ejecuta localmente la interfaz. En localhost se puede probar la cámara; pa
 
 Para habilitar ez-catalog durante el desarrollo, definí `EZ_CATALOG_API_KEY` en el entorno antes de iniciar Vite. No pongas la clave en el frontend ni la subas al repositorio.
 
-## Catálogo compartido con Supabase
+## Inventario y compras en Supabase
 
 1. Creá un proyecto Supabase en el plan Free.
-2. En **SQL Editor**, ejecutá el contenido de `supabase/schema.sql`.
+2. En **SQL Editor**, ejecutá el contenido de `supabase/schema.sql`. Si el proyecto ya tiene el catálogo compartido instalado, podés volver a ejecutar el archivo: las tablas y funciones se crean de forma idempotente.
 3. En **Project Settings → API Keys**, copiá la URL del proyecto y la **Secret key** (`sb_secret_...`). También se admite la clave JWT anterior `service_role`.
-4. En Vercel, agregá `SUPABASE_URL` y `SUPABASE_SECRET_KEY` en **Settings → Environment Variables** para Production y Preview. La clave secreta solo se usa en funciones server-side, nunca como `VITE_*` ni en el navegador.
-5. Volvé a desplegar la app. Las fichas nuevas y los EAN asociados se comparten entre teléfonos; la pantalla sigue guardando una copia local para uso sin conexión.
-6. En un entorno con Node, cargá esas dos variables en `.env.local` (archivo ignorado por Git) y corré `node scripts/sync-catalog-to-supabase.mjs` para importar los catálogos SEPA y DDI.
+4. Definí una clave larga y única para `SHOP_ACCESS_PASSWORD`.
+5. En Vercel, agregá `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y `SHOP_ACCESS_PASSWORD` en **Settings → Environment Variables** para Production y Preview. Las claves solo se usan en funciones server-side, nunca como `VITE_*` ni en el navegador.
+6. Volvé a desplegar la app. Al abrirla, ingresá la clave `SHOP_ACCESS_PASSWORD`. El inventario, los precios, compras y escaneos se leen y guardan en Supabase; la aplicación no usa `localStorage` ni mantiene una copia local de los datos.
+7. Para desarrollo, copiá las variables al `.env.local` ignorado por Git. Corré `node scripts/sync-catalog-to-supabase.mjs` para importar los catálogos SEPA y DDI.
+
+Las tablas de gestión del local son:
+
+- `public.shop_products`: inventario, EAN, descripción, stock y precio asignado por el local. El precio está en la columna `price`.
+- `public.shop_cart`: carrito de compra en curso, compartido con el mismo local.
+- `public.shop_purchases`: compras finalizadas y total por compra. `items` conserva un JSON con la descripción, cantidad y precio de cada producto al momento de la compra.
+- `public.shop_scan_history`: último escaneo guardado por EAN.
+
+Para revisar precios, abrí el proyecto en Supabase → **Table Editor** → `shop_products` → columna `price`. El catálogo comunitario (`catalog_items`) es una tabla aparte y no contiene el precio de venta del local.
+
+El inventario, las compras y el historial tienen RLS habilitado y no se exponen con la clave pública. El servidor usa `SUPABASE_SECRET_KEY` y requiere `SHOP_ACCESS_PASSWORD` antes de permitir leer o modificar esos datos.
 
 Los aportes manuales nuevos quedan marcados como no verificados y la API limita la cantidad de aportes por IP. El EAN no se fusiona por similitud: para asociar códigos de una misma presentación, se elige la ficha exacta; para otro tamaño/aroma, se crea una variante de la familia.
 
@@ -42,9 +54,9 @@ Si no se configura la clave, la app mantiene activas las otras fuentes y muestra
 - **UPCitemdb**: catálogo internacional, consultado mediante función de Vercel o el servidor incluido. El plan gratuito informa 100 consultas al día.
 - **GS1 Argentina**: la app enlaza a la solicitud de acceso de su API empresarial, que puede devolver GTIN, marca, descripción, imagen y contenido neto. GS1 entrega la documentación al solicitar acceso; la consulta automática requiere esa información y credenciales.
 - **Catálogo compartido**: Supabase guarda productos, variantes y códigos alternativos; los EAN se pueden reconocer en cualquier teléfono. Los aportes comunitarios se marcan como no verificados.
-- **Catálogo del teléfono**: se mantiene una copia local para consultas sin conexión y sigue disponible si Supabase no está configurado.
+- **Inventario del local**: Supabase guarda el stock y el precio propio del negocio. Si la base de datos no está disponible, la app no habilita el acceso ni guarda los cambios localmente.
 
-Las fuentes remotas requieren Internet. El catálogo guardado y la interfaz PWA pueden abrirse sin conexión, pero no se pueden hacer consultas externas.
+Las fuentes remotas y los datos del local requieren Internet. La interfaz puede instalarse como aplicación, pero no funciona sin conexión.
 
 ## Actualizar el índice SEPA
 

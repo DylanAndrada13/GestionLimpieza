@@ -3,14 +3,48 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lookupEzCatalog } from './lib/ez-catalog.js';
 import { contributeSharedProduct, contributionRateLimited, lookupSharedBarcode, searchSharedCatalog } from './lib/shared-catalog.js';
+import { GET as getShopState } from './api/shop/state.js';
+import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
+import { POST as recordShopPurchase } from './api/shop/purchases.js';
+import { POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
+import { POST as saveShopCart } from './api/shop/cart.js';
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4173);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '12kb' }));
+app.use(express.json({ limit: '256kb' }));
 
 const asRequest = req => ({ headers: { get: name => req.headers[name.toLowerCase()] || null } });
+
+const shopHandlers = {
+  'GET /api/shop/state': getShopState,
+  'POST /api/shop/products': saveShopProduct,
+  'DELETE /api/shop/products': resetShopProducts,
+  'POST /api/shop/purchases': recordShopPurchase,
+  'POST /api/shop/cart': saveShopCart,
+  'POST /api/shop/history': recordShopHistory,
+  'DELETE /api/shop/history': clearShopHistory,
+};
+
+app.all('/api/shop/:resource', async (req, res, next) => {
+  const handler = shopHandlers[`${req.method} /api/shop/${req.params.resource}`];
+  if (!handler) return next();
+  try {
+    const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : JSON.stringify(req.body || {});
+    const request = new Request(`http://${req.headers.host}${req.originalUrl}`, {
+      method: req.method,
+      headers: req.headers,
+      ...(body ? { body } : {}),
+    });
+    const response = await handler(request);
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    res.status(500).json({ error: error?.message || 'Error interno del servidor.' });
+  }
+});
 
 app.get('/api/catalog/lookup', async (req, res) => {
   try { res.set('Cache-Control', 'no-store').json(await lookupSharedBarcode(req.query.barcode)); }

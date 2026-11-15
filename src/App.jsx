@@ -31,23 +31,15 @@ import {
   X,
 } from 'lucide-react';
 import {
-  CART_KEY,
-  CATALOG_KEY,
-  HISTORY_KEY,
-  PURCHASES_KEY,
   equivalentBarcodes,
   fetchSources,
   findLocalProduct,
   isBarcode,
-  loadCatalog,
-  loadHistory,
   mergeProduct,
   productBarcodes,
-  readList,
   sanitizeStoredProduct,
   tidy,
   totalUnits,
-  writeList,
 } from './catalog';
 import './style.css';
 
@@ -58,7 +50,6 @@ const dateLabel = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '' : DATE_FORMAT.format(date).replace(',', ' ·');
 };
-const nextId = () => (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
 const sameDay = (value) => {
   const date = new Date(value);
   const today = new Date();
@@ -82,6 +73,28 @@ function Brand({ onClick, small = false }) {
       <LogoMark size={small ? 29 : 34} />
       <span>Perfumería <i>&</i> Limpieza</span>
     </button>
+  );
+}
+
+function DatabaseGate({ password, onPasswordChange, onSubmit, message, busy, configured }) {
+  return (
+    <div className="app-shell screen-database-gate">
+      <main className="database-gate">
+        <LogoMark size={72} />
+        <h1>Datos del local</h1>
+        <p>{configured ? 'Ingresá la clave del local para cargar el inventario y las compras desde la base de datos.' : 'La app necesita una clave de acceso y una conexión a Supabase configuradas en el servidor.'}</p>
+        <form onSubmit={onSubmit}>
+          <label className="field">
+            <span>Clave de acceso</span>
+            <input type="password" value={password} onChange={event => onPasswordChange(event.target.value)} autoComplete="current-password" required />
+          </label>
+          {message && <div className="form-error"><Info size={16} /> {message}</div>}
+          <button className="primary-cta" type="submit" disabled={busy || !configured}>
+            {busy ? <><Loader2 size={17} className="spin" /> Conectando con Supabase…</> : 'Conectar con la base de datos'}
+          </button>
+        </form>
+      </main>
+    </div>
   );
 }
 
@@ -151,13 +164,13 @@ function BottomNav({ active, onNavigate, cartCount, home = false }) {
     ? [
         { id: 'home', label: 'Inicio', icon: Home },
         { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
-        { id: 'profile', label: 'Perfil', icon: User },
+        { id: 'profile', label: 'Ajustes', icon: User },
       ]
     : [
         { id: 'home', label: 'Inicio', icon: Home },
         { id: 'products', label: 'Productos', icon: Box },
         { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
-        { id: 'profile', label: 'Perfil', icon: User },
+        { id: 'profile', label: 'Ajustes', icon: User },
       ];
 
   return (
@@ -203,7 +216,7 @@ function MenuDrawer({ open, onClose, onNavigate, onInstall, cartCount }) {
     { id: 'products', label: 'Productos', icon: Box },
     { id: 'purchases', label: 'Compras', icon: ShoppingCart, badge: cartCount },
     { id: 'history', label: 'Historial', icon: History },
-    { id: 'profile', label: 'Perfil', icon: User },
+    { id: 'profile', label: 'Ajustes', icon: User },
   ];
   return (
     <div className="drawer-backdrop" onClick={onClose}>
@@ -347,14 +360,14 @@ function HomeScreen({ onRegisterStock, onStartPurchase, onViewPurchases, onMenu,
         </button>
 
         <div className="home-quick-actions">
+          <button type="button" className="quick-action is-primary" onClick={onStartPurchase}>
+            <span className="quick-action-icon"><ShoppingCart size={30} strokeWidth={1.7} /></span>
+            <strong>Iniciar compra</strong>
+            <ChevronRight size={20} />
+          </button>
           <button type="button" className="quick-action" onClick={onRegisterStock}>
             <span className="quick-action-icon"><PackagePlus size={30} strokeWidth={1.7} /></span>
             <strong>Registrar stock</strong>
-            <ChevronRight size={20} />
-          </button>
-          <button type="button" className="quick-action" onClick={onStartPurchase}>
-            <span className="quick-action-icon"><ShoppingCart size={30} strokeWidth={1.7} /></span>
-            <strong>Iniciar compra</strong>
             <ChevronRight size={20} />
           </button>
           <button type="button" className="quick-action" onClick={onViewPurchases}>
@@ -639,7 +652,7 @@ function PurchasesScreen({ purchases, onBack, onScan }) {
     <main className="app-body">
       <PageIntro
         title="Compras"
-        text="Las ventas registradas desde el teléfono."
+        text="Compras guardadas en la base de datos del local."
         onBack={onBack}
         action={today.length > 0 ? <span className="today-pill">Hoy · {money(todayTotal)}</span> : null}
       />
@@ -903,13 +916,13 @@ function SearchScreen({ catalog, onBack, onLookup, onOpenLocal, onScan }) {
   );
 }
 
-function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, onHistory, onInstall, onClearData }) {
+function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, onHistory, onInstall, onResetInventory }) {
   const [confirming, setConfirming] = useState(false);
   const units = totalUnits(catalog);
   const sold = purchases.reduce((sum, purchase) => sum + (Number(purchase.total) || 0), 0);
   return (
     <main className="app-body">
-      <PageIntro title="Perfil" onBack={onBack} />
+      <PageIntro title="Ajustes" onBack={onBack} />
       <section className="profile-card">
         <div className="profile-avatar"><LogoMark size={48} /></div>
         <div>
@@ -935,21 +948,25 @@ function ProfileScreen({ catalog, purchases, onBack, onProducts, onPurchases, on
       <section className="profile-section">
         <h2>Aplicación</h2>
         <button type="button" className="profile-row" onClick={onInstall}><span className="profile-row-icon"><Download size={19} /></span><span><strong>Instalar aplicación</strong><small>Agregala a la pantalla de inicio</small></span><ChevronRight size={17} /></button>
-        <div className="profile-row static"><span className="profile-row-icon"><ShieldCheck size={19} /></span><span><strong>Datos en este dispositivo</strong><small>El inventario y las compras se guardan localmente.</small></span></div>
+        <div className="profile-row static"><span className="profile-row-icon"><ShieldCheck size={19} /></span><span><strong>Datos conectados a Supabase</strong><small>Inventario, precios, compras e historial se guardan en la base del local.</small></span></div>
       </section>
 
-      <button type="button" className="danger-button" onClick={() => setConfirming(true)}><Trash2 size={17} /> Borrar datos del dispositivo</button>
+      <section className="profile-section inventory-reset-section">
+        <h2>Inventario</h2>
+        <p>Este botón elimina todos los productos registrados, incluidos sus precios y stock.</p>
+        <button type="button" className="danger-button" onClick={() => setConfirming(true)}><Trash2 size={17} /> Reiniciar inventario</button>
+      </section>
       <p className="version-note">Perfumería &amp; Limpieza · versión 1.0</p>
 
       {confirming && (
         <div className="modal-backdrop" onClick={() => setConfirming(false)}>
           <section className="confirm-dialog" role="dialog" aria-modal="true" onClick={event => event.stopPropagation()}>
             <div className="confirm-icon"><Trash2 size={24} /></div>
-            <h2>¿Borrar todos los datos?</h2>
-            <p>Se van a eliminar el inventario, la compra actual y el historial de compras de este teléfono. Esta acción no se puede deshacer.</p>
+            <h2>¿Reiniciar el inventario?</h2>
+            <p>Se eliminarán los productos registrados, sus precios y su stock de la base de datos. Las compras registradas se conservarán. Esta acción no se puede deshacer.</p>
             <div className="confirm-actions">
               <button type="button" className="secondary-cta compact" onClick={() => setConfirming(false)}>Cancelar</button>
-              <button type="button" className="danger-button solid" onClick={() => { setConfirming(false); onClearData(); }}>Sí, borrar todo</button>
+              <button type="button" className="danger-button solid" onClick={() => { setConfirming(false); onResetInventory(); }}>Sí, reiniciar inventario</button>
             </div>
           </section>
         </div>
@@ -970,6 +987,7 @@ function InventoryForm({ initial, isEdit, onCancel, onSave }) {
     image: initial.image || '',
   });
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const fixedBarcode = Boolean(initial.barcode);
   const update = (field, value) => setForm(current => ({ ...current, [field]: value }));
 
@@ -982,7 +1000,8 @@ function InventoryForm({ initial, isEdit, onCancel, onSave }) {
     const stock = Math.max(0, Math.round(Number(form.stock) || 0));
     if (price < 0) { setError('El precio no puede ser negativo.'); return; }
     setError('');
-    onSave({
+    setSaving(true);
+    Promise.resolve(onSave({
       barcode: code,
       barcodes: [...new Set([code, ...(initial.barcodes || [])])],
       name: tidy(form.name),
@@ -993,7 +1012,8 @@ function InventoryForm({ initial, isEdit, onCancel, onSave }) {
       stock,
       image: tidy(form.image),
       source: 'Mi inventario',
-    });
+    })).catch(saveError => setError(saveError?.message || 'No se pudo guardar el producto en Supabase.'))
+      .finally(() => setSaving(false));
   };
 
   return (
@@ -1057,7 +1077,7 @@ function InventoryForm({ initial, isEdit, onCancel, onSave }) {
         </label>
 
         {error && <div className="form-error"><Info size={16} /> {error}</div>}
-        <button type="submit" className="primary-cta save-inventory"><Check size={19} /> {isEdit ? 'Guardar cambios' : 'Guardar en el inventario'}</button>
+        <button type="submit" className="primary-cta save-inventory" disabled={saving}><Check size={19} /> {saving ? 'Guardando en Supabase…' : isEdit ? 'Guardar cambios' : 'Guardar en el inventario'}</button>
         <button type="button" className="secondary-cta compact" onClick={onCancel}>Cancelar</button>
       </form>
     </main>
@@ -1155,10 +1175,16 @@ export default function App() {
   const [activeBarcode, setActiveBarcode] = useState('');
   const [matches, setMatches] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [catalog, setCatalog] = useState(() => loadCatalog());
-  const [cart, setCart] = useState(() => readList(CART_KEY));
-  const [purchases, setPurchases] = useState(() => readList(PURCHASES_KEY));
-  const [history, setHistory] = useState(() => loadHistory());
+  const [catalog, setCatalog] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [databaseStatus, setDatabaseStatus] = useState('loading');
+  const [databaseConfigured, setDatabaseConfigured] = useState(true);
+  const [databaseBusy, setDatabaseBusy] = useState(false);
+  const [databaseMessage, setDatabaseMessage] = useState('');
+  const [gatePassword, setGatePassword] = useState('');
+  const [shopPassword, setShopPassword] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -1170,6 +1196,69 @@ export default function App() {
   const [zoomState, setZoomState] = useState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
   const [scannerSession, setScannerSession] = useState(0);
   const [inventoryDraft, setInventoryDraft] = useState(null);
+  const cartRef = useRef([]);
+  const cartMutationRef = useRef(Promise.resolve());
+
+  const requestShop = useCallback(async (path, options = {}) => {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(shopPassword ? { 'X-Shop-Password': shopPassword } : {}),
+        ...options.headers,
+      },
+    });
+    let payload = {};
+    try { payload = await response.json(); } catch { }
+    if (!response.ok) throw Object.assign(new Error(payload.error || `La base de datos respondió ${response.status}.`), { status: response.status });
+    return payload;
+  }, [shopPassword]);
+
+  const commitCart = useCallback((update) => {
+    const commit = async () => {
+      const next = typeof update === 'function' ? update(cartRef.current) : update;
+      const { cart: saved } = await requestShop('/api/shop/cart', { method: 'POST', body: JSON.stringify({ items: next }) });
+      cartRef.current = saved;
+      setCart(saved);
+      return saved;
+    };
+    const pending = cartMutationRef.current.then(commit, commit);
+    cartMutationRef.current = pending.catch(() => {});
+    return pending;
+  }, [requestShop]);
+
+  const applyShopState = useCallback((data) => {
+    setCatalog((data.catalog || []).map(sanitizeStoredProduct));
+    const loadedCart = data.cart || [];
+    cartRef.current = loadedCart;
+    setCart(loadedCart);
+    setPurchases(data.purchases || []);
+    setHistory(data.history || []);
+    setDatabaseStatus('ready');
+    setDatabaseMessage('');
+  }, []);
+
+  const connectDatabase = useCallback(async (event) => {
+    event.preventDefault();
+    setDatabaseBusy(true);
+    setDatabaseMessage('');
+    try {
+      const response = await fetch('/api/shop/state', { headers: { 'X-Shop-Password': gatePassword }, cache: 'no-store' });
+      let payload = {};
+      try { payload = await response.json(); } catch { }
+      if (!response.ok) {
+        setDatabaseConfigured(response.status !== 503);
+        setDatabaseMessage(payload.error || 'No se pudo conectar con Supabase.');
+        return;
+      }
+      setShopPassword(gatePassword);
+      applyShopState(payload);
+    } catch {
+      setDatabaseMessage('No se pudo contactar al servidor. Comprobá la conexión e intentá otra vez.');
+    } finally {
+      setDatabaseBusy(false);
+    }
+  }, [applyShopState, gatePassword]);
 
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
@@ -1194,9 +1283,14 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(null), duration);
   }, []);
 
-  const addHistory = useCallback((entry) => {
-    setHistory(prev => [entry, ...prev.filter(row => row.barcode !== entry.barcode)].slice(0, 24));
-  }, []);
+  const addHistory = useCallback(async (entry) => {
+    try {
+      const { scan } = await requestShop('/api/shop/history', { method: 'POST', body: JSON.stringify(entry) });
+      setHistory(prev => [scan, ...prev.filter(row => row.barcode !== scan.barcode)].slice(0, 24));
+    } catch (error) {
+      showToast(error.message || 'No se pudo guardar el escaneo en Supabase.', 'error');
+    }
+  }, [requestShop, showToast]);
 
   const scanLookup = useCallback(async (rawValue, options = {}) => {
     const code = tidy(rawValue).replace(/\s/g, '');
@@ -1211,8 +1305,6 @@ export default function App() {
     setBusy(true);
     setScreen('product');
     setMenuOpen(false);
-    addHistory({ barcode: code, at: new Date().toISOString(), found: null, name: '' });
-
     try {
       const found = await fetchSources(
         code,
@@ -1225,7 +1317,7 @@ export default function App() {
       if (token !== lookupTokenRef.current) return false;
       setMatches(found);
       const best = found.find(item => item.name);
-      addHistory({
+      await addHistory({
         barcode: code,
         at: new Date().toISOString(),
         found: Boolean(best),
@@ -1234,7 +1326,7 @@ export default function App() {
     } catch {
       if (token !== lookupTokenRef.current) return false;
       setMatches([]);
-      addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
+      await addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
     } finally {
       if (token === lookupTokenRef.current) setBusy(false);
     }
@@ -1304,7 +1396,8 @@ export default function App() {
     setBackScreen('home');
     setActiveBarcode(code);
     if (existing) {
-      openInventoryForm(existing, { barcode: code, origin: 'products' });
+      void addHistory({ barcode: code, at: new Date().toISOString(), found: true, name: existing.name });
+      openInventoryForm(existing, { origin: 'products' });
       return true;
     }
 
@@ -1317,43 +1410,34 @@ export default function App() {
       if (token !== lookupTokenRef.current) return false;
       const match = results.find(item => item.name);
       const prefilled = match ? { ...match, price: 0, stock: 0 } : null;
+      void addHistory({ barcode: code, at: new Date().toISOString(), found: Boolean(match), name: match?.name || '' });
       openInventoryForm(prefilled, { barcode: code, origin: 'products' });
     } catch {
       if (token !== lookupTokenRef.current) return false;
+      void addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
       openInventoryForm(null, { barcode: code, origin: 'products' });
     } finally {
       if (token === lookupTokenRef.current) setBusy(false);
     }
     return true;
-  }, [catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
+  }, [addHistory, catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
   scannerCodeRef.current = handleScannerCode;
 
-  const saveInventory = useCallback((entry) => {
-    const current = readList(CATALOG_KEY).map(sanitizeStoredProduct);
-    const saved = sanitizeStoredProduct({ ...entry, updatedAt: new Date().toISOString() });
-    const next = [saved, ...current.filter(item => !overlaps(item, saved))];
-    setCatalog(next);
-    setMatches(prev => [saved, ...prev.filter(item => !overlaps(item, saved))]);
-    setActiveBarcode(saved.barcode);
+  const saveInventory = useCallback(async (entry) => {
     const origin = inventoryDraft?.origin || 'products';
-    setInventoryDraft(null);
-    setScreen(origin === 'product' ? 'product' : 'products');
-    showToast(origin === 'product' ? 'Producto guardado. Ya podés agregarlo a la compra.' : 'Producto guardado en el inventario.');
-
-    fetch('/api/catalog/contribute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        barcode: saved.barcode,
-        name: saved.name,
-        brand: saved.brand,
-        quantity: saved.quantity,
-        category: saved.category,
-        image: saved.image,
-      }),
-      signal: AbortSignal.timeout(8000),
-    }).catch(() => {});
-  }, [inventoryDraft, showToast]);
+    try {
+      const { product: saved } = await requestShop('/api/shop/products', { method: 'POST', body: JSON.stringify(entry) });
+      setCatalog(prev => [saved, ...prev.filter(item => !overlaps(item, saved))]);
+      setMatches(prev => [saved, ...prev.filter(item => !overlaps(item, saved))]);
+      setActiveBarcode(saved.barcode);
+      setInventoryDraft(null);
+      setScreen(origin === 'product' ? 'product' : 'products');
+      showToast(origin === 'product' ? 'Producto guardado en Supabase. Ya podés agregarlo a la compra.' : 'Producto guardado en Supabase.');
+    } catch (error) {
+      showToast(error.message || 'No se pudo guardar el producto en Supabase.', 'error');
+      throw error;
+    }
+  }, [inventoryDraft, requestShop, showToast]);
 
   const addToCart = useCallback((item, qty = 1) => {
     if (!item?.name) {
@@ -1361,99 +1445,107 @@ export default function App() {
       return;
     }
     const amount = Math.max(1, Math.floor(Number(qty) || 1));
-    setCart(prev => {
+    const row = {
+      barcode: item.barcode || activeBarcode,
+      name: item.name,
+      brand: item.brand || '',
+      quantity: item.quantity || '',
+      image: item.image || '',
+      price: Number(item.price) || 0,
+      stock: Number(item.stock) || 0,
+      qty: amount,
+    };
+    void commitCart(prev => {
       const existing = prev.find(row => overlaps(row, item));
       if (existing) return prev.map(row => overlaps(row, item) ? { ...row, qty: row.qty + amount, price: Number(item.price) || row.price } : row);
-      return [...prev, {
-        barcode: item.barcode || activeBarcode,
-        name: item.name,
-        brand: item.brand || '',
-        quantity: item.quantity || '',
-        image: item.image || '',
-        price: Number(item.price) || 0,
-        stock: Number(item.stock) || 0,
-        qty: amount,
-      }];
-    });
-    showToast({
-      type: 'cart',
-      title: 'Agregado a la compra',
-      message: `${amount} × ${item.name}${Number(item.price) > 0 ? ` · ${money(Number(item.price) * amount)}` : ''}`,
-      action: 'Ver compra',
-      actionScreen: 'cart',
-    });
-    try { navigator.vibrate?.(35); } catch { }
-  }, [activeBarcode, showToast]);
+      return [...prev, row];
+    }).then(() => {
+      showToast({
+        type: 'cart',
+        title: 'Agregado a la compra',
+        message: `${amount} × ${item.name}${Number(item.price) > 0 ? ` · ${money(Number(item.price) * amount)}` : ''}`,
+        action: 'Ver compra',
+        actionScreen: 'cart',
+      });
+      try { navigator.vibrate?.(35); } catch { }
+    }).catch(error => showToast(error.message || 'No se pudo guardar el carrito en Supabase.', 'error'));
+  }, [activeBarcode, commitCart, showToast]);
 
   const changeQty = useCallback((barcode, delta) => {
-    setCart(prev => prev.flatMap(item => {
+    void commitCart(prev => prev.flatMap(item => {
       if (!equivalentBarcodes(barcode).some(code => productBarcodes(item).includes(code))) return [item];
       const qty = item.qty + delta;
       return qty <= 0 ? [] : [{ ...item, qty }];
-    }));
-  }, []);
+    })).catch(error => showToast(error.message || 'No se pudo actualizar el carrito en Supabase.', 'error'));
+  }, [commitCart, showToast]);
 
   const removeFromCart = useCallback((barcode) => {
-    setCart(prev => prev.filter(item => !equivalentBarcodes(barcode).some(code => productBarcodes(item).includes(code))));
-  }, []);
+    void commitCart(prev => prev.filter(item => !equivalentBarcodes(barcode).some(code => productBarcodes(item).includes(code))))
+      .catch(error => showToast(error.message || 'No se pudo actualizar el carrito en Supabase.', 'error'));
+  }, [commitCart, showToast]);
 
-  const finalizePurchase = useCallback(() => {
-    if (!cart.length) return;
-    const purchase = {
-      id: nextId(),
-      at: new Date().toISOString(),
-      items: cart.map(item => ({ ...item })),
-      units: cartUnits(cart),
-      total: cartAmount(cart),
-    };
-    setPurchases(prev => [purchase, ...prev].slice(0, 120));
-    setCatalog(prev => prev.map(item => {
-      const sold = cart.find(row => overlaps(item, row));
-      if (!sold) return item;
-      return { ...item, stock: Math.max(0, (Number(item.stock) || 0) - sold.qty) };
-    }));
-    setCart([]);
-    setScreen('purchases');
-    setMenuOpen(false);
-    showToast({
-      type: 'success',
-      title: 'Venta registrada',
-      message: `Total ${money(purchase.total)} · El stock ya se actualizó.`,
-      action: 'Escanear',
-      actionScreen: 'scanner',
-    });
-  }, [cart, showToast]);
-
-  const clearData = useCallback(() => {
-    setCatalog([]);
-    setCart([]);
-    setPurchases([]);
-    setHistory([]);
-    setMatches([]);
-    setActiveBarcode('');
+  const finalizePurchase = useCallback(async () => {
     try {
-      localStorage.removeItem('limpia.catalog.v1');
-      localStorage.removeItem('limpia.history.v1');
-    } catch { }
-    setScreen('home');
-    showToast('Se borraron los datos de este dispositivo.');
-  }, [showToast]);
+      await cartMutationRef.current;
+      const items = cartRef.current;
+      if (!items.length) return;
+      const { purchase, catalog: updatedCatalog } = await requestShop('/api/shop/purchases', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      });
+      setPurchases(prev => [purchase, ...prev.filter(item => item.id !== purchase.id)].slice(0, 120));
+      setCatalog(updatedCatalog);
+      cartRef.current = [];
+      setCart([]);
+      setScreen('purchases');
+      setMenuOpen(false);
+      showToast({
+        type: 'success',
+        title: 'Compra registrada en Supabase',
+        message: `Total ${money(purchase.total)} · El stock ya se actualizó.`,
+        action: 'Escanear',
+        actionScreen: 'scanner',
+      });
+    } catch (error) {
+      showToast(error.message || 'No se pudo registrar la compra en Supabase.', 'error');
+    }
+  }, [requestShop, showToast]);
+
+  const resetInventory = useCallback(async () => {
+    try {
+      await requestShop('/api/shop/products', { method: 'DELETE' });
+      setCatalog([]);
+      cartRef.current = [];
+      setCart([]);
+      setMatches([]);
+      setActiveBarcode('');
+      setScreen('profile');
+      showToast('Inventario reiniciado en Supabase. Las compras se conservaron.');
+    } catch (error) {
+      showToast(error.message || 'No se pudo reiniciar el inventario.', 'error');
+    }
+  }, [requestShop, showToast]);
+
+  const clearScanHistory = useCallback(async () => {
+    try {
+      await requestShop('/api/shop/history', { method: 'DELETE' });
+      setHistory([]);
+    } catch (error) {
+      showToast(error.message || 'No se pudo limpiar el historial.', 'error');
+    }
+  }, [requestShop, showToast]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      if (import.meta.env.PROD) {
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
-      } else {
-        navigator.serviceWorker.getRegistrations()
-          .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+      navigator.serviceWorker.getRegistrations()
+        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+        .catch(() => {});
+      if ('caches' in window) {
+        caches.keys()
+          .then(keys => Promise.all(keys
+            .filter(key => key.startsWith('cleanstock-shell-') || key.startsWith('limpia-shell-'))
+            .map(key => caches.delete(key))))
           .catch(() => {});
-        if ('caches' in window) {
-          caches.keys()
-            .then(keys => Promise.all(keys
-              .filter(key => key.startsWith('cleanstock-shell-') || key.startsWith('limpia-shell-'))
-              .map(key => caches.delete(key))))
-            .catch(() => {});
-        }
       }
     }
     const handler = (event) => {
@@ -1464,10 +1556,29 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  useEffect(() => { writeList(CATALOG_KEY, catalog); }, [catalog]);
-  useEffect(() => { writeList(CART_KEY, cart); }, [cart]);
-  useEffect(() => { writeList(PURCHASES_KEY, purchases); }, [purchases]);
-  useEffect(() => { writeList(HISTORY_KEY, history); }, [history]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const response = await fetch('/api/shop/state', { cache: 'no-store' });
+        let payload = {};
+        try { payload = await response.json(); } catch { }
+        if (!alive) return;
+        if (response.ok) applyShopState(payload);
+        else {
+          setDatabaseConfigured(response.status !== 503);
+          setDatabaseMessage(payload.error || 'Conectate para cargar los datos desde Supabase.');
+          setDatabaseStatus('locked');
+        }
+      } catch {
+        if (alive) {
+          setDatabaseMessage('No se pudo contactar al servidor. Comprobá la conexión e intentá otra vez.');
+          setDatabaseStatus('locked');
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [applyShopState]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
 
@@ -1602,6 +1713,19 @@ export default function App() {
     setScreen(backScreen || 'home');
   };
 
+  if (databaseStatus !== 'ready') {
+    return (
+      <DatabaseGate
+        password={gatePassword}
+        onPasswordChange={setGatePassword}
+        onSubmit={connectDatabase}
+        message={databaseMessage}
+        busy={databaseBusy || databaseStatus === 'loading'}
+        configured={databaseConfigured}
+      />
+    );
+  }
+
   return (
     <div className={`app-shell screen-${screen}`}>
       {screen === 'home' && (
@@ -1671,7 +1795,7 @@ export default function App() {
               history={history}
               onBack={goBack}
               onLookup={scanLookup}
-              onClear={() => setHistory([])}
+              onClear={clearScanHistory}
             />
           )}
           {screen === 'search' && (
@@ -1692,7 +1816,7 @@ export default function App() {
               onPurchases={() => navigate('purchases')}
               onHistory={() => navigate('history')}
               onInstall={install}
-              onClearData={clearData}
+              onResetInventory={resetInventory}
             />
           )}
           {screen === 'inventory-form' && inventoryDraft && (
@@ -1712,7 +1836,7 @@ export default function App() {
           active={navActive}
           onNavigate={navigate}
           cartCount={cartCount}
-          home={screen === 'home'}
+          home={screen === 'home' || screen === 'profile'}
         />
       )}
 

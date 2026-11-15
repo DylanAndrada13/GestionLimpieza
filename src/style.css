@@ -1177,7 +1177,7 @@ img { max-width: 100%; }
 .round-action { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--purple-600); color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; }
 
 /* ------------------------------------------------------------------ */
-/* Perfil                                                              */
+/* Ajustes                                                             */
 /* ------------------------------------------------------------------ */
 
 .profile-card {
@@ -1793,6 +1793,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .quick-action-icon { width: 54px; height: 40px; display: grid; place-items: center; border-right: 1px solid rgba(225, 184, 83, .6); padding-right: 12px; }
 .quick-action strong { color: #f4eee2; font-size: 15px; font-weight: 600; }
 .quick-action > svg { color: #e3ba52; }
+.quick-action.is-primary { background: linear-gradient(135deg, #f1d077, #c99a38); border-color: #f0cf71; color: #171107; box-shadow: 0 8px 25px rgba(197, 150, 48, .22); }
+.quick-action.is-primary strong, .quick-action.is-primary > svg { color: #171107; }
+.quick-action.is-primary .quick-action-icon { border-color: rgba(45, 33, 9, .45); }
+.profile-section.inventory-reset-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(218, 174, 76, .24); }
+.inventory-reset-section > p { margin: 0; color: #b8b0a3; font-size: 11px; line-height: 1.5; }
+.inventory-reset-section .danger-button { margin-top: 8px; }
+.database-gate { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 28px; background: radial-gradient(100% 80% at 50% 0%, rgba(164, 119, 33, .16), transparent 65%), #11100e; }
+.database-gate > .logo-mark { margin-bottom: 8px; }
+.database-gate h1 { margin: 0; color: #f1cf6f; font-size: 25px; }
+.database-gate > p { margin: 0 0 8px; max-width: 330px; color: #b8b0a3; font-size: 13px; line-height: 1.55; }
+.database-gate form { display: flex; flex-direction: column; gap: 13px; }
+.database-gate .primary-cta { width: 100%; }
+.database-gate .primary-cta:disabled { opacity: .48; cursor: not-allowed; }
 .purchase-date strong { color: #f0c85f; font-size: 16px; font-weight: 700; letter-spacing: -.2px; }
 .purchase-date small { color: #aaa18f; }
 .purchase-amount { color: #d6b35b; }

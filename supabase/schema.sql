@@ -1,4 +1,4 @@
--- Limpia shared product catalog. Run once in Supabase SQL Editor.
+-- Shared product catalog and private shop data. Run in Supabase SQL Editor.
 create extension if not exists pgcrypto;
 
 create table if not exists public.catalog_families (
@@ -156,3 +156,117 @@ revoke all on function public.catalog_contribute(text,text,text,text,text,text,t
 grant execute on function public.catalog_contribute(text,text,text,text,text,text,text,text) to service_role;
 revoke all on function public.catalog_import_batch(jsonb) from public, anon, authenticated;
 grant execute on function public.catalog_import_batch(jsonb) to service_role;
+
+-- Private shop data. Prices belong to the shop inventory and are separate
+-- from the shared catalog above.
+create table if not exists public.shop_products (
+  barcode text primary key check (barcode ~ '^[0-9]{8,14}$'),
+  barcodes text[] not null default '{}',
+  name text not null,
+  brand text not null default '',
+  category text not null default '',
+  quantity text not null default '',
+  image_url text,
+  price numeric(12,2) not null default 0 check (price >= 0),
+  stock integer not null default 0 check (stock >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists shop_products_name_idx on public.shop_products using gin (to_tsvector('simple', name || ' ' || brand));
+
+create table if not exists public.shop_cart (
+  id text primary key default 'current' check (id = 'current'),
+  items jsonb not null default '[]'::jsonb check (jsonb_typeof(items) = 'array'),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.shop_purchases (
+  id uuid primary key default gen_random_uuid(),
+  occurred_at timestamptz not null default now(),
+  total numeric(12,2) not null check (total >= 0),
+  units integer not null check (units > 0),
+  items jsonb not null check (jsonb_typeof(items) = 'array')
+);
+
+create index if not exists shop_purchases_occurred_at_idx on public.shop_purchases(occurred_at desc);
+
+create table if not exists public.shop_scan_history (
+  barcode text primary key check (barcode ~ '^[0-9]{8,14}$'),
+  scanned_at timestamptz not null default now(),
+  found boolean,
+  name text not null default ''
+);
+
+create index if not exists shop_scan_history_scanned_at_idx on public.shop_scan_history(scanned_at desc);
+
+alter table public.shop_products enable row level security;
+alter table public.shop_cart enable row level security;
+alter table public.shop_purchases enable row level security;
+alter table public.shop_scan_history enable row level security;
+revoke all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_scan_history from anon, authenticated;
+grant all on public.shop_products, public.shop_cart, public.shop_purchases, public.shop_scan_history to service_role;
+
+create or replace function public.reset_shop_inventory()
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  delete from public.shop_products;
+  delete from public.shop_cart where id = 'current';
+end;
+$$;
+
+revoke all on function public.reset_shop_inventory() from public, anon, authenticated;
+grant execute on function public.reset_shop_inventory() to service_role;
+
+create or replace function public.record_shop_purchase(p_items jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_line jsonb;
+  v_code text;
+  v_qty integer;
+  v_price numeric(12,2);
+  v_total numeric(12,2) := 0;
+  v_units integer := 0;
+  v_purchase public.shop_purchases%rowtype;
+begin
+  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 200 then
+    raise exception 'purchase must contain between 1 and 200 items';
+  end if;
+
+  for v_line in select value from jsonb_array_elements(p_items) loop
+    v_code := coalesce(v_line->>'barcode', '');
+    v_qty := coalesce((v_line->>'qty')::integer, 0);
+    v_price := coalesce((v_line->>'price')::numeric, 0);
+    if v_code !~ '^[0-9]{8,14}$' or v_qty < 1 or v_price < 0 then
+      raise exception 'invalid purchase item';
+    end if;
+    v_units := v_units + v_qty;
+    v_total := v_total + v_price * v_qty;
+  end loop;
+
+  for v_line in select value from jsonb_array_elements(p_items) loop
+    v_code := coalesce(v_line->>'barcode', '');
+    v_qty := (v_line->>'qty')::integer;
+    update public.shop_products
+      set stock = greatest(0, stock - v_qty), updated_at = now()
+      where barcode = v_code or barcodes @> array[v_code];
+  end loop;
+
+  insert into public.shop_purchases(total, units, items)
+    values (v_total, v_units, p_items)
+    returning * into v_purchase;
+  delete from public.shop_cart where id = 'current';
+  return to_jsonb(v_purchase);
+end;
+$$;
+
+revoke all on function public.record_shop_purchase(jsonb) from public, anon, authenticated;
+grant execute on function public.record_shop_purchase(jsonb) to service_role;
