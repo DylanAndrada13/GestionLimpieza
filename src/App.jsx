@@ -321,7 +321,7 @@ function PageIntro({ title, text, onBack, action }) {
 /* Pantallas                                                           */
 /* ------------------------------------------------------------------ */
 
-function HomeScreen({ onScan, onCart, onSearch, onHistory, onMenu, onHome }) {
+function HomeScreen({ onRegisterStock, onStartPurchase, onViewPurchases, onMenu, onHome }) {
   return (
     <div className="home-screen">
       <header className="home-hero">
@@ -337,37 +337,30 @@ function HomeScreen({ onScan, onCart, onSearch, onHistory, onMenu, onHome }) {
       </header>
 
       <main className="home-sheet">
-        <button type="button" className="scan-hero-card" onClick={onScan}>
+        <button type="button" className="scan-hero-card" onClick={onStartPurchase}>
           <span className="scan-glyph" aria-hidden="true">
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <span className="scan-bars" />
           </span>
-          <strong>Escanear Producto</strong>
+          <strong>Escanear producto</strong>
           <span>Usá la cámara para leer<br />el código de barras</span>
         </button>
 
-        <div className="action-grid">
-          <button type="button" className="action-card" onClick={onScan}>
-            <span className="action-icon">
-              <Package size={42} strokeWidth={1.45} />
-              <span className="action-badge plus"><Plus size={13} strokeWidth={3} /></span>
-            </span>
-            <strong>Agregar a<br />la Compra</strong>
+        <div className="home-quick-actions">
+          <button type="button" className="quick-action" onClick={onRegisterStock}>
+            <span className="quick-action-icon"><PackagePlus size={30} strokeWidth={1.7} /></span>
+            <strong>Registrar stock</strong>
+            <ChevronRight size={20} />
           </button>
-          <button type="button" className="action-card" onClick={onCart}>
-            <span className="action-icon">
-              <Package size={42} strokeWidth={1.45} />
-              <span className="action-badge minus"><Minus size={13} strokeWidth={3} /></span>
-            </span>
-            <strong>Retirar de<br />la Compra</strong>
+          <button type="button" className="quick-action" onClick={onStartPurchase}>
+            <span className="quick-action-icon"><ShoppingCart size={30} strokeWidth={1.7} /></span>
+            <strong>Iniciar compra</strong>
+            <ChevronRight size={20} />
           </button>
-          <button type="button" className="action-card" onClick={onSearch}>
-            <span className="action-icon plain"><Search size={40} strokeWidth={1.6} /></span>
-            <strong>Consultar<br />Producto</strong>
-          </button>
-          <button type="button" className="action-card" onClick={onHistory}>
-            <span className="action-icon plain"><Clock size={40} strokeWidth={1.6} /></span>
-            <strong>Historial</strong>
+          <button type="button" className="quick-action" onClick={onViewPurchases}>
+            <span className="quick-action-icon"><History size={30} strokeWidth={1.7} /></span>
+            <strong>Ver compras</strong>
+            <ChevronRight size={20} />
           </button>
         </div>
       </main>
@@ -665,9 +658,9 @@ function PurchasesScreen({ purchases, onBack, onScan }) {
                 <button type="button" className="purchase-summary" onClick={() => setOpenId(open ? '' : purchase.id)} aria-expanded={open}>
                   <span className="purchase-date">
                     <span className="purchase-calendar"><Clock size={17} /></span>
-                    <span><strong>{dateLabel(purchase.at)}</strong><small>{purchase.items.length} producto{purchase.items.length === 1 ? '' : 's'} · {units} unidad{units === 1 ? '' : 'es'}</small></span>
+                    <span><strong>{money(purchase.total)}</strong><small>{dateLabel(purchase.at)} · {purchase.items.length} producto{purchase.items.length === 1 ? '' : 's'} · {units} unidad{units === 1 ? '' : 'es'}</small></span>
                   </span>
-                  <span className="purchase-amount">{money(purchase.total)} <ChevronRight size={17} /></span>
+                  <span className="purchase-amount"><ChevronRight size={17} /></span>
                 </button>
                 {open && (
                   <div className="purchase-detail">
@@ -1172,6 +1165,7 @@ export default function App() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [scannerMode, setScannerMode] = useState('purchase');
   const [focusMessage, setFocusMessage] = useState('Enfoque automático');
   const [zoomState, setZoomState] = useState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
   const [scannerSession, setScannerSession] = useState(0);
@@ -1182,7 +1176,7 @@ export default function App() {
   const readerRef = useRef(null);
   const handledRef = useRef(false);
   const lookupTokenRef = useRef(0);
-  const scanLookupRef = useRef(null);
+  const scannerCodeRef = useRef(null);
   const toastTimerRef = useRef(null);
 
   const localProduct = useMemo(() => findLocalProduct(catalog, activeBarcode), [catalog, activeBarcode]);
@@ -1246,8 +1240,6 @@ export default function App() {
     }
     return true;
   }, [addHistory, showToast]);
-  scanLookupRef.current = scanLookup;
-
   const navigate = useCallback((next) => {
     setMenuOpen(false);
     if (next === 'home') {
@@ -1258,7 +1250,8 @@ export default function App() {
     }
   }, []);
 
-  const openScanner = useCallback(() => {
+  const openScanner = useCallback((mode = 'purchase') => {
+    setScannerMode(mode === 'stock' ? 'stock' : 'purchase');
     handledRef.current = false;
     setCameraError('');
     setZoomState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
@@ -1299,6 +1292,21 @@ export default function App() {
     setScreen('inventory-form');
     setMenuOpen(false);
   }, [activeBarcode, catalog]);
+
+  const handleScannerCode = useCallback((rawValue) => {
+    if (scannerMode !== 'stock') return scanLookup(rawValue, { back: 'home' });
+    const code = tidy(rawValue).replace(/\s/g, '');
+    if (!isBarcode(code)) {
+      showToast('Ingresá un código EAN o UPC de 8 a 14 números.', 'error');
+      return false;
+    }
+    const existing = findLocalProduct(catalog, code);
+    setBackScreen('home');
+    setActiveBarcode(code);
+    openInventoryForm(existing, { barcode: code, origin: 'products' });
+    return true;
+  }, [catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
+  scannerCodeRef.current = handleScannerCode;
 
   const saveInventory = useCallback((entry) => {
     const current = readList(CATALOG_KEY).map(sanitizeStoredProduct);
@@ -1500,7 +1508,7 @@ export default function App() {
           if (!code) return;
           handledRef.current = true;
           stopCameraStream();
-          scanLookupRef.current(code, { back: 'home' });
+          scannerCodeRef.current(code);
         });
         if (!alive) { try { controls.stop(); } catch { } return; }
         controlsRef.current = controls;
@@ -1578,10 +1586,9 @@ export default function App() {
     <div className={`app-shell screen-${screen}`}>
       {screen === 'home' && (
         <HomeScreen
-          onScan={openScanner}
-          onCart={() => { setBackScreen('home'); navigate('cart'); }}
-          onSearch={() => navigate('search')}
-          onHistory={() => navigate('history')}
+          onRegisterStock={() => openScanner('stock')}
+          onStartPurchase={() => openScanner('purchase')}
+          onViewPurchases={() => navigate('purchases')}
           onMenu={() => setMenuOpen(true)}
           onHome={() => navigate('home')}
         />
@@ -1596,7 +1603,7 @@ export default function App() {
           zoomState={zoomState}
           onZoom={changeZoom}
           onClose={() => setScreen('home')}
-          onManual={(code) => scanLookup(code, { back: 'home' })}
+          onManual={handleScannerCode}
         />
       )}
 
