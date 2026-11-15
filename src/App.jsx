@@ -1293,7 +1293,7 @@ export default function App() {
     setMenuOpen(false);
   }, [activeBarcode, catalog]);
 
-  const handleScannerCode = useCallback((rawValue) => {
+  const handleScannerCode = useCallback(async (rawValue) => {
     if (scannerMode !== 'stock') return scanLookup(rawValue, { back: 'home' });
     const code = tidy(rawValue).replace(/\s/g, '');
     if (!isBarcode(code)) {
@@ -1303,7 +1303,27 @@ export default function App() {
     const existing = findLocalProduct(catalog, code);
     setBackScreen('home');
     setActiveBarcode(code);
-    openInventoryForm(existing, { barcode: code, origin: 'products' });
+    if (existing) {
+      openInventoryForm(existing, { barcode: code, origin: 'products' });
+      return true;
+    }
+
+    const token = ++lookupTokenRef.current;
+    setMatches([]);
+    setBusy(true);
+    setScreen('product');
+    try {
+      const results = await fetchSources(code);
+      if (token !== lookupTokenRef.current) return false;
+      const match = results.find(item => item.name);
+      const prefilled = match ? { ...match, price: 0, stock: 0 } : null;
+      openInventoryForm(prefilled, { barcode: code, origin: 'products' });
+    } catch {
+      if (token !== lookupTokenRef.current) return false;
+      openInventoryForm(null, { barcode: code, origin: 'products' });
+    } finally {
+      if (token === lookupTokenRef.current) setBusy(false);
+    }
     return true;
   }, [catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
   scannerCodeRef.current = handleScannerCode;
