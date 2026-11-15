@@ -19,12 +19,13 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Store,
+  Trash2,
   X,
 } from 'lucide-react';
 import { productBarcodes } from './catalog';
 import './management.css';
 
-const LOW_STOCK = 3;
+const LOW_STOCK = 5;
 const money = value => `$${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0))}`;
 const dateTime = value => {
   const date = new Date(value);
@@ -134,7 +135,7 @@ function Dashboard({ catalog, onSection, onEdit }) {
   );
 }
 
-function ProductsPage({ catalog, onEdit, onAdd }) {
+function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const filtered = useMemo(() => {
@@ -175,7 +176,7 @@ function ProductsPage({ catalog, onEdit, onAdd }) {
                     <td className="management-price">{money(item.price)}</td>
                     <td>{number(stock)} u.</td>
                     <td><span className={`management-status ${stock === 0 ? 'empty' : stock <= LOW_STOCK ? 'low' : 'ok'}`}><i />{stock === 0 ? 'Sin stock' : stock <= LOW_STOCK ? 'Stock bajo' : 'En orden'}</span></td>
-                    <td><button type="button" className="management-icon-button" onClick={() => onEdit(item)} aria-label={`Editar ${item.name}`}><Pencil size={16} /></button></td>
+                    <td><div className="management-row-actions"><button type="button" className="management-icon-button" onClick={() => onEdit(item)} aria-label={`Editar ${item.name}`}><Pencil size={16} /></button><button type="button" className="management-icon-button delete" onClick={() => onDelete(item)} disabled={Boolean(deletingBarcode)} aria-label={`Eliminar ${item.name}`}>{deletingBarcode === item.barcode ? <Loader2 size={16} className="management-spin" /> : <Trash2 size={16} />}</button></div></td>
                   </tr>
                 );
               })}
@@ -279,7 +280,7 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
   );
 }
 
-function ManagementShell({ catalog, section, setSection, purchases, loadingPurchases, onAdd, onEdit, onSales, onLogout }) {
+function ManagementShell({ catalog, section, setSection, purchases, loadingPurchases, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout }) {
   const active = SECTIONS.find(item => item.id === section) || SECTIONS[0];
   const ActiveIcon = active.icon;
   return (
@@ -308,7 +309,7 @@ function ManagementShell({ catalog, section, setSection, purchases, loadingPurch
         </header>
         <div className="management-content">
           {section === 'home' && <Dashboard catalog={catalog} onSection={setSection} onEdit={onEdit} />}
-          {section === 'products' && <ProductsPage catalog={catalog} onEdit={onEdit} onAdd={onAdd} />}
+          {section === 'products' && <ProductsPage catalog={catalog} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} deletingBarcode={deletingBarcode} />}
           {section === 'movements' && <MovementsPage purchases={purchases} loading={loadingPurchases} />}
           {section === 'settings' && <SettingsPage onSales={onSales} onLogout={onLogout} />}
         </div>
@@ -331,6 +332,7 @@ export default function ManagementApp() {
   const [editorProduct, setEditorProduct] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [deletingBarcode, setDeletingBarcode] = useState('');
   const [editorError, setEditorError] = useState('');
   const [toast, setToast] = useState('');
 
@@ -429,13 +431,29 @@ export default function ManagementApp() {
     finally { setSavingProduct(false); }
   };
 
+  const deleteProduct = async product => {
+    const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borrará su registro de productos en Supabase. Las compras ya registradas se conservan.`);
+    if (!confirmed) return;
+    setDeletingBarcode(product.barcode);
+    try {
+      const result = await request(`/api/shop/products?barcode=${encodeURIComponent(product.barcode)}`, { method: 'DELETE' });
+      if (result.barcode !== product.barcode) throw new Error('Supabase no confirmó el EAN eliminado. Actualizá la lista y volvé a intentar.');
+      setCatalog(previous => previous.filter(item => item.barcode !== product.barcode));
+      setToast('Producto eliminado del inventario.');
+      window.setTimeout(() => setToast(''), 3200);
+    } catch (error) {
+      setToast(error.message || 'No se pudo eliminar el producto.');
+      window.setTimeout(() => setToast(''), 4200);
+    } finally { setDeletingBarcode(''); }
+  };
+
   if (mobile) return <MobileNotice />;
   if (status === 'loading') return <main className="management-loading"><Logo /><span className="management-loader-ring"><Loader2 size={30} className="management-spin" /></span><p>Conectando con los datos del local…</p></main>;
   if (status !== 'ready') return <EntryPanel password={password} setPassword={setPassword} onSubmit={login} busy={busy} message={message} onSales={() => window.location.assign('/')} />;
 
   return (
     <>
-      <ManagementShell catalog={catalog} section={section} setSection={setSection} purchases={purchases} loadingPurchases={loadingPurchases} onAdd={() => openEditor(null)} onEdit={openEditor} onSales={() => window.location.assign('/')} onLogout={logout} />
+      <ManagementShell catalog={catalog} section={section} setSection={setSection} purchases={purchases} loadingPurchases={loadingPurchases} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={() => window.location.assign('/')} onLogout={logout} />
       {editorOpen && <ProductEditor key={editorProduct?.barcode || 'new-product'} product={editorProduct} busy={savingProduct} error={editorError} setError={setEditorError} onClose={() => setEditorOpen(false)} onSave={saveProduct} />}
       {toast && <div className="management-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
     </>

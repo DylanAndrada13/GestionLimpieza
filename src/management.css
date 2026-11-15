@@ -137,6 +137,10 @@
 .management-status.empty { border-color: rgba(196, 100, 76, .24); background: rgba(112, 44, 34, .18); color: #e1937d; }
 .management-icon-button { width: 34px; height: 34px; display: inline-grid; place-items: center; border: 1px solid rgba(218, 178, 78, .2); border-radius: 9px; background: #211b10; color: #d8b454; cursor: pointer; }
 .management-icon-button:hover { border-color: rgba(228, 194, 106, .55); background: #302612; }
+.management-row-actions { display: flex; align-items: center; gap: 7px; }
+.management-icon-button.delete { border-color: rgba(193, 103, 79, .23); background: rgba(94, 40, 31, .18); color: #df9582; }
+.management-icon-button.delete:hover { border-color: rgba(225, 134, 111, .55); background: rgba(116, 48, 36, .3); }
+.management-icon-button:disabled { opacity: .55; cursor: wait; }
 .management-table-footer { padding: 12px 19px; border-top: 1px solid rgba(213, 174, 78, .12); color: #847b69; font-size: 10px; }
 .management-empty { min-height: 205px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #9b8a60; text-align: center; }
 .management-empty strong { color: #e3dccd; font: 600 16px Georgia, 'Times New Roman', serif; }

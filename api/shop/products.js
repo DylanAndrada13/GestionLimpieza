@@ -1,5 +1,5 @@
 import { shopAccessResponse } from '../../lib/shop-auth.js';
-import { resetShopInventory, saveShopProduct } from '../../lib/shop-data.js';
+import { deleteShopProduct, resetShopInventory, saveShopProduct } from '../../lib/shop-data.js';
 
 export async function POST(request) {
   const denied = shopAccessResponse(request);
@@ -17,6 +17,11 @@ export async function DELETE(request) {
   const denied = shopAccessResponse(request);
   if (denied) return denied;
   try {
+    const barcode = new URL(request.url).searchParams.get('barcode');
+    if (barcode !== null) {
+      const deleted = await deleteShopProduct(barcode);
+      return Response.json({ ok: true, ...deleted }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     await resetShopInventory();
     return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
