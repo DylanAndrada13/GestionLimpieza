@@ -7,6 +7,6 @@ export async function GET(request) {
   try {
     return Response.json(await getShopState(), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo leer la base de datos.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudieron cargar los datos del local.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }

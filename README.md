@@ -1,6 +1,6 @@
-# CleanStock · escáner PWA
+# CR Perfumería · app de ventas e inventario
 
-Aplicación móvil para escanear códigos EAN/UPC de productos de limpieza, mantener el inventario del local con stock y precio, y registrar compras descontando unidades automáticamente.
+Aplicación para escanear productos de perfumería y limpieza, mantener el inventario del local con stock y precio, y registrar compras descontando unidades automáticamente.
 
 ## Ejecutar en desarrollo
 
@@ -33,6 +33,10 @@ Las tablas de gestión del local son:
 Para revisar precios, abrí el proyecto en Supabase → **Table Editor** → `shop_products` → columna `price`. El catálogo comunitario (`catalog_items`) es una tabla aparte y no contiene el precio de venta del local.
 
 El inventario, las compras y el historial tienen RLS habilitado y no se exponen con la clave pública. El servidor usa `SUPABASE_SECRET_KEY` y requiere `SHOP_ACCESS_PASSWORD` antes de permitir leer o modificar esos datos.
+
+## Limpiar datos de prueba antes de entregar
+
+Para dejar la app sin inventario, compras, movimientos, escaneos ni aportes manuales, ejecutá `supabase/reset-shop-data.sql` en **SQL Editor** de Supabase. El script conserva el catálogo importado de SEPA y DDI para que las búsquedas sigan funcionando, y se puede volver a ejecutar cuando sea necesario.
 
 Los aportes manuales nuevos quedan marcados como no verificados y la API limita la cantidad de aportes por IP. El EAN no se fusiona por similitud: para asociar códigos de una misma presentación, se elige la ficha exacta; para otro tamaño/aroma, se crea una variante de la familia.
 

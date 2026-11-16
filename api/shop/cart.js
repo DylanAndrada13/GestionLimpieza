@@ -9,6 +9,6 @@ export async function POST(request) {
   try {
     return Response.json({ cart: await saveShopCart(input.items) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo guardar el carrito en Supabase.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudo guardar la compra en curso.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }

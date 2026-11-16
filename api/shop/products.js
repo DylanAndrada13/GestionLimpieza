@@ -9,7 +9,7 @@ export async function POST(request) {
   try {
     return Response.json({ product: await saveShopProduct(input) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo guardar el producto en Supabase.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudo guardar el producto. Probá de nuevo.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }
 
@@ -25,6 +25,6 @@ export async function DELETE(request) {
     await resetShopInventory();
     return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo reiniciar el inventario.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudieron reiniciar los precios.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }

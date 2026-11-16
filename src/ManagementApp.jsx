@@ -129,8 +129,8 @@ function Dashboard({ catalog, onSection, onEdit }) {
         <article className="management-panel management-side-card">
           <div className="management-side-icon"><Store size={31} /></div>
           <span className="management-eyebrow">Tu negocio</span>
-          <h2>Inventario conectado</h2>
-          <p>Los cambios se guardan en la base de datos del local y se reflejan también en el modo venta.</p>
+          <h2>Inventario al día</h2>
+          <p>Los cambios se guardan y se reflejan también en el modo venta.</p>
           <button type="button" className="management-secondary" onClick={() => onSection('products')}><Package size={17} /> Gestionar productos</button>
         </article>
       </section>
@@ -159,7 +159,7 @@ function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
       </div>
       <section className="management-panel management-products-panel">
         <div className="management-products-toolbar">
-          <label className="management-search"><Search size={18} /><input value={term} onChange={event => setTerm(event.target.value)} placeholder="Buscar por nombre, marca o EAN" /></label>
+          <label className="management-search"><Search size={18} /><input value={term} onChange={event => setTerm(event.target.value)} placeholder="Buscar por nombre, marca o código de barras" /></label>
           <div className="management-filters" aria-label="Filtrar productos">
             <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Todos</button>
             <button type="button" className={filter === 'low' ? 'active' : ''} onClick={() => setFilter('low')}>Stock bajo</button>
@@ -168,7 +168,7 @@ function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
         </div>
         <div className="management-table-wrap">
           <table className="management-table">
-            <thead><tr><th>Producto</th><th>Código EAN</th><th>Precio</th><th>Stock</th><th>Estado</th><th aria-label="Acciones" /></tr></thead>
+            <thead><tr><th>Producto</th><th>Código de barras</th><th>Precio</th><th>Stock</th><th>Estado</th><th aria-label="Acciones" /></tr></thead>
             <tbody>
               {filtered.map(item => {
                 const stock = Number(item.stock) || 0;
@@ -200,7 +200,7 @@ function MovementsPage({ movements, loading, stockTrackingAvailable }) {
       <div className="management-page-heading"><div><span className="management-eyebrow">Actividad del local</span><h1>Movimientos</h1><p>Ingresos de stock y compras finalizadas.</p></div></div>
       <section className="management-panel management-movements-panel">
         <header className="management-panel-heading"><div><span className="management-eyebrow">Historial</span><h2>Actividad reciente</h2></div><span className="management-count-pill">{number(movements.length)} registros</span></header>
-        {stockTrackingAvailable === false && <div className="management-movement-setup">Para guardar ingresos de stock, ejecutá la actualización de <strong>supabase/schema.sql</strong> en el SQL Editor de Supabase.</div>}
+        {stockTrackingAvailable === false && <div className="management-movement-setup">El historial de ingresos de stock todavía no está activo. Contactá al soporte para habilitarlo.</div>}
         {loading ? <div className="management-loading-inline"><Loader2 size={19} className="management-spin" /> Cargando movimientos…</div> : movements.length ? (
           <div className="management-movement-list">
             {movements.map(movement => {
@@ -217,7 +217,7 @@ function MovementsPage({ movements, loading, stockTrackingAvailable }) {
                   </button>
                   {open && (isPurchase
                     ? <div className="management-movement-detail">{movement.items.map((item, index) => <div className="management-movement-line" key={`${item.barcode}-${index}`}><span>{item.name} <small>×{item.qty}</small></span><strong>{money(Number(item.price) * Number(item.qty))}</strong></div>)}</div>
-                    : <div className="management-movement-detail"><div className="management-movement-line"><span>{movement.name} <small>EAN {movement.barcode}</small></span><strong>Stock {number(movement.previousStock)} → {number(movement.newStock)}</strong></div></div>)}
+                    : <div className="management-movement-detail"><div className="management-movement-line"><span>{movement.name} <small>Código {movement.barcode}</small></span><strong>Stock {number(movement.previousStock)} → {number(movement.newStock)}</strong></div></div>)}
                 </article>
               );
             })}
@@ -231,7 +231,7 @@ function MovementsPage({ movements, loading, stockTrackingAvailable }) {
 function SettingsPage({ onSales, onLogout, theme, onThemeChange }) {
   return (
     <>
-      <div className="management-page-heading"><div><span className="management-eyebrow">Preferencias</span><h1>Configuración</h1><p>Acceso y conexión de CR Perfumería.</p></div></div>
+      <div className="management-page-heading"><div><span className="management-eyebrow">Preferencias</span><h1>Configuración</h1><p>Acceso y preferencias de CR Perfumería.</p></div></div>
       <section className="management-settings-grid">
         <article className="management-panel management-settings-card">
           <span className="management-settings-icon"><Sun size={21} /></span><span className="management-eyebrow">Apariencia</span>
@@ -240,8 +240,8 @@ function SettingsPage({ onSales, onLogout, theme, onThemeChange }) {
         </article>
         <article className="management-panel management-settings-card">
           <span className="management-settings-icon"><Store size={21} /></span><span className="management-eyebrow">Datos del local</span>
-          <h2>Base de datos conectada</h2><p>Inventario, precios y movimientos se guardan en Supabase y se comparten con el modo venta.</p>
-          <span className="management-connection"><i /> Conexión activa</span>
+          <h2>Datos del local</h2><p>El inventario, los precios y los movimientos se comparten con el modo venta.</p>
+          <span className="management-connection"><i /> Datos al día</span>
         </article>
         <article className="management-panel management-settings-card">
           <span className="management-settings-icon"><SlidersHorizontal size={21} /></span><span className="management-eyebrow">Modos de uso</span>
@@ -275,7 +275,7 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
         <header><div><span className="management-eyebrow">Inventario</span><h2 id="management-editor-title">{product ? 'Editar producto' : 'Nuevo producto'}</h2></div><button type="button" className="management-icon-button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button></header>
         <form onSubmit={submit}>
           <div className="management-form-grid">
-            <label className="management-field full"><span>Código EAN</span><input value={form.barcode} onChange={event => set('barcode', event.target.value.replace(/\D/g, ''))} inputMode="numeric" minLength="8" maxLength="14" pattern="[0-9]{8,14}" required disabled={Boolean(product)} /></label>
+            <label className="management-field full"><span>Código de barras</span><input value={form.barcode} onChange={event => set('barcode', event.target.value.replace(/\D/g, ''))} inputMode="numeric" minLength="8" maxLength="14" pattern="[0-9]{8,14}" required disabled={Boolean(product)} /></label>
             <label className="management-field full"><span>Nombre</span><input value={form.name} onChange={event => set('name', event.target.value)} maxLength="180" required /></label>
             <label className="management-field"><span>Marca</span><input value={form.brand} onChange={event => set('brand', event.target.value)} maxLength="100" /></label>
             <label className="management-field"><span>Categoría</span><input value={form.category} onChange={event => set('category', event.target.value)} maxLength="100" /></label>
@@ -317,7 +317,7 @@ function ManagementShell({ catalog, section, setSection, movements, loadingMovem
       <main className="management-workspace">
         <header className="management-topbar">
           <div className="management-crumb"><ActiveIcon size={17} /><span>Gestión</span><ChevronRight size={15} /><strong>{active.label}</strong></div>
-          <div className="management-topbar-right"><span className="management-status-dot" /> <span>Datos conectados</span><span className="management-topbar-divider" /><span className="management-topbar-avatar">CR</span></div>
+          <div className="management-topbar-right"><span className="management-status-dot" /> <span>Datos al día</span><span className="management-topbar-divider" /><span className="management-topbar-avatar">CR</span></div>
         </header>
         <div className="management-content">
           {section === 'home' && <Dashboard catalog={catalog} onSection={setSection} onEdit={onEdit} />}
@@ -378,7 +378,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
       .catch(error => {
         if (!active) return;
         setStatus('locked');
-        if (error.status !== 401) setMessage(error.message || 'No se pudo conectar con la base de datos.');
+        if (error.status !== 401) setMessage(error.message || 'No se pudieron cargar los datos del local.');
       });
     return () => { active = false; };
   }, [applyState, mobile, request]);
@@ -411,7 +411,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
       finally { pending = false; }
     };
     void refresh();
-    const timer = window.setInterval(refresh, 5000);
+    const timer = window.setInterval(refresh, 15_000);
     const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
@@ -429,7 +429,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
       if (!response.ok) throw new Error(data.error || 'No se pudo iniciar sesión.');
       setPassword('');
       applyState(data);
-    } catch (error) { setMessage(error.message || 'No se pudo conectar con el servidor.'); }
+    } catch (error) { setMessage(error.message || 'No se pudo conectar con los datos del local.'); }
     finally { setBusy(false); }
   };
 
@@ -451,19 +451,19 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
       const { product } = await request('/api/shop/products', { method: 'POST', body: JSON.stringify({ ...form, price: Number(form.price), stock: Number(form.stock), barcodes: editorProduct?.barcodes || [form.barcode] }) });
       setCatalog(previous => [...previous.filter(item => item.barcode !== product.barcode), product].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')));
       setEditorOpen(false);
-      setToast('Producto guardado en la base de datos.');
+      setToast('Producto guardado.');
       window.setTimeout(() => setToast(''), 3200);
     } catch (error) { setEditorError(error.message || 'No se pudo guardar el producto.'); }
     finally { setSavingProduct(false); }
   };
 
   const deleteProduct = async product => {
-    const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borrará su registro de productos en Supabase. Las compras ya registradas se conservan.`);
+    const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borrará el producto. Las compras ya registradas se conservan.`);
     if (!confirmed) return;
     setDeletingBarcode(product.barcode);
     try {
       const result = await request(`/api/shop/products?barcode=${encodeURIComponent(product.barcode)}`, { method: 'DELETE' });
-      if (result.barcode !== product.barcode) throw new Error('Supabase no confirmó el EAN eliminado. Actualizá la lista y volvé a intentar.');
+      if (result.barcode !== product.barcode) throw new Error('No se pudo confirmar la eliminación. Actualizá la lista y volvé a intentar.');
       setCatalog(previous => previous.filter(item => item.barcode !== product.barcode));
       setToast('Producto eliminado del inventario.');
       window.setTimeout(() => setToast(''), 3200);

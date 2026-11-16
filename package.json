@@ -1,7 +1,7 @@
 {
-  "name": "limpia-scan-pwa",
+  "name": "cr-perfumeria",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -20,5 +20,21 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.0.7"
-  }
+  },
+  "description": "Aplicación para escanear productos, controlar el stock y registrar las compras de CR Perfumería.",
+  "main": "server.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DylanAndrada13/GestionLimpieza.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DylanAndrada13/GestionLimpieza/issues"
+  },
+  "homepage": "https://github.com/DylanAndrada13/GestionLimpieza#readme"
 }

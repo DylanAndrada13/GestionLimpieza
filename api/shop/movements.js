@@ -7,6 +7,6 @@ export async function GET(request) {
   try {
     return Response.json(await getShopMovements(), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudieron cargar los movimientos.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudieron cargar los movimientos del local.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }

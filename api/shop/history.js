@@ -7,7 +7,7 @@ export async function GET(request) {
   try {
     return Response.json({ history: await getShopHistory() }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo cargar el historial.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudo cargar el historial de escaneos.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }
 
@@ -19,7 +19,7 @@ export async function POST(request) {
   try {
     return Response.json({ scan: await recordShopScan(input) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo guardar el escaneo.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudo guardar el escaneo. Probá de nuevo.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }
 

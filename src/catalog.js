@@ -29,6 +29,8 @@ const numberValue = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+export const parseNumber = numberValue;
+
 function readPrice(raw) {
   const candidates = [
     raw?.price,
@@ -287,7 +289,8 @@ export function mergeProduct(local, external, barcode) {
     quantity: own.quantity || base.quantity || '',
     category: own.category || base.category || '',
     image: own.image || base.image || '',
-    price: Number(own.price) > 0 ? Number(own.price) : Number(base.price) || 0,
+    // El precio del inventario del local siempre manda, incluso si todavía está en $0.
+    price: own.barcode ? (Number.isFinite(Number(own.price)) ? Math.max(0, Number(own.price)) : 0) : Number(base.price) || 0,
     stock: Number.isFinite(Number(own.stock)) ? Math.max(0, Number(own.stock)) : 0,
     source: own.source || base.source || 'Mi inventario',
     inInventory: Boolean(own.barcode),

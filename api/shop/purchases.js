@@ -19,6 +19,6 @@ export async function POST(request) {
   try {
     return Response.json(await recordShopPurchase(input.items), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo registrar la compra en Supabase.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: error.message || 'No se pudo registrar la compra. Probá de nuevo.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }
 }

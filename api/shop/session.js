@@ -16,10 +16,10 @@ export async function POST(request) {
     const headers = new Headers(response.headers);
     return Response.json(state, { status: 200, headers });
   } catch (error) {
-    return Response.json({ error: error.message || 'No se pudo leer la base de datos.' }, { status: error.status || 502, headers: response.headers });
+    return Response.json({ error: error.message || 'No se pudieron cargar los datos del local.' }, { status: error.status || 502, headers: response.headers });
   }
 }
 
-export async function DELETE() {
-  return clearShopSessionResponse();
+export async function DELETE(request) {
+  return clearShopSessionResponse(request);
 }

@@ -6,6 +6,10 @@
     {
       "source": "/gestion",
       "destination": "/index.html"
+    },
+    {
+      "source": "/gestion/:path*",
+      "destination": "/index.html"
     }
   ]
 }
