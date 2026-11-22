@@ -10,6 +10,7 @@ import { GET as listShopPurchases, POST as recordShopPurchase } from './api/shop
 import { GET as listShopMovements } from './api/shop/movements.js';
 import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
 import { POST as saveShopCart } from './api/shop/cart.js';
+import { GET as listWebOrders, POST as updateWebOrder } from './api/shop/web-orders.js';
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,8 @@ const shopHandlers = {
   'POST /api/shop/history': recordShopHistory,
   'GET /api/shop/history': listShopHistory,
   'DELETE /api/shop/history': clearShopHistory,
+  'GET /api/shop/web-orders': listWebOrders,
+  'POST /api/shop/web-orders': updateWebOrder,
 };
 
 app.all('/api/shop/:resource', async (req, res, next) => {

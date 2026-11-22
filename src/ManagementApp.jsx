@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDownUp,
   ArrowRight,
+  Bell,
   Boxes,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  Globe,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -26,6 +28,7 @@ import {
 } from 'lucide-react';
 import { productBarcodes } from './catalog';
 import ThemePicker from './ThemePicker';
+import WebOrdersPage, { needsAttention } from './WebOrdersPage';
 import './management.css';
 
 const LOW_STOCK = 5;
@@ -39,6 +42,7 @@ const emptyProduct = () => ({ barcode: '', name: '', brand: '', category: '', qu
 
 const SECTIONS = [
   { id: 'home', label: 'Inicio', icon: LayoutDashboard },
+  { id: 'orders', label: 'Pedidos online', icon: Globe },
   { id: 'products', label: 'Productos', icon: Package },
   { id: 'movements', label: 'Movimientos', icon: ArrowDownUp },
   { id: 'settings', label: 'Configuración', icon: Settings },
@@ -292,7 +296,9 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
   );
 }
 
-function ManagementShell({ catalog, section, setSection, movements, loadingMovements, stockTrackingAvailable, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout, theme, onThemeChange }) {
+function ManagementShell({ catalog, section, setSection, movements, loadingMovements, stockTrackingAvailable, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout, theme, onThemeChange, webOrders }) {
+  const attentionCount = (webOrders.data?.orders || []).filter(needsAttention).length;
+  const newCount = (webOrders.data?.orders || []).filter(order => order.order_status === 'pending_review').length;
   const active = SECTIONS.find(item => item.id === section) || SECTIONS[0];
   const ActiveIcon = active.icon;
   return (
@@ -304,7 +310,8 @@ function ManagementShell({ catalog, section, setSection, movements, loadingMovem
           {SECTIONS.map(item => {
             const Icon = item.icon;
             const selected = section === item.id;
-            return <button type="button" key={item.id} className={`management-nav-item ${selected ? 'active' : ''}`} onClick={() => setSection(item.id)} aria-current={selected ? 'page' : undefined}><Icon size={19} /><span>{item.label}</span>{selected && <i />}</button>;
+            const badge = item.id === 'orders' && attentionCount > 0 ? <b className={`management-nav-badge ${newCount ? 'is-new' : ''}`}>{attentionCount}</b> : null;
+            return <button type="button" key={item.id} className={`management-nav-item ${selected ? 'active' : ''}`} onClick={() => setSection(item.id)} aria-current={selected ? 'page' : undefined}><Icon size={19} /><span>{item.label}</span>{badge}{selected && !badge && <i />}</button>;
           })}
         </nav>
         <div className="management-sidebar-bottom">
@@ -317,9 +324,10 @@ function ManagementShell({ catalog, section, setSection, movements, loadingMovem
       <main className="management-workspace">
         <header className="management-topbar">
           <div className="management-crumb"><ActiveIcon size={17} /><span>Gestión</span><ChevronRight size={15} /><strong>{active.label}</strong></div>
-          <div className="management-topbar-right"><span className="management-status-dot" /> <span>Datos al día</span><span className="management-topbar-divider" /><span className="management-topbar-avatar">CR</span></div>
+          <div className="management-topbar-right">{newCount > 0 && <button type="button" className="management-topbar-orders" onClick={() => setSection('orders')}><Bell size={15} /> {newCount === 1 ? '1 pedido nuevo' : `${newCount} pedidos nuevos`}</button>}<span className="management-status-dot" /> <span>Datos al día</span><span className="management-topbar-divider" /><span className="management-topbar-avatar">CR</span></div>
         </header>
         <div className="management-content">
+          {section === 'orders' && <WebOrdersPage data={webOrders.data} loading={webOrders.loading} error={webOrders.error} onRefresh={webOrders.refresh} onAction={webOrders.act} working={webOrders.working} notificationsEnabled={webOrders.notificationsEnabled} onEnableNotifications={webOrders.enableNotifications} />}
           {section === 'home' && <Dashboard catalog={catalog} onSection={setSection} onEdit={onEdit} />}
           {section === 'products' && <ProductsPage catalog={catalog} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} deletingBarcode={deletingBarcode} />}
           {section === 'movements' && <MovementsPage movements={movements} loading={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} />}
@@ -347,6 +355,12 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
   const [deletingBarcode, setDeletingBarcode] = useState('');
   const [editorError, setEditorError] = useState('');
   const [toast, setToast] = useState('');
+  const [webData, setWebData] = useState(null);
+  const [webLoading, setWebLoading] = useState(false);
+  const [webError, setWebError] = useState('');
+  const [webWorking, setWebWorking] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => (typeof Notification === 'undefined' ? null : Notification.permission === 'granted'));
+  const knownPending = useRef(null);
 
   const applyState = useCallback(data => {
     setCatalog(data.catalog || []);
@@ -417,6 +431,66 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [request, status]);
 
+  // Online orders: one small query every 30 s while gestión is open and visible.
+  // A new cash order (or a newly paid one) shows a toast, a short sound, a browser notification and a counter in the tab title.
+  const loadWebOrders = useCallback(async () => {
+    setWebLoading(true);
+    try {
+      const data = await request('/api/shop/web-orders');
+      setWebData(data);
+      setWebError('');
+      const pending = (data.orders || []).filter(needsAttention).map(order => order.id);
+      if (knownPending.current) {
+        const fresh = (data.orders || []).filter(order => needsAttention(order) && !knownPending.current.has(order.id));
+        if (fresh.length) {
+          const text = fresh.length === 1 ? `Nuevo pedido online: ${fresh[0].order_number}` : `${fresh.length} pedidos online nuevos`;
+          setToast(text);
+          window.setTimeout(() => setToast(''), 6000);
+          try {
+            const audio = new (window.AudioContext || window.webkitAudioContext)();
+            const tone = audio.createOscillator(); const gain = audio.createGain();
+            tone.frequency.value = 880; gain.gain.setValueAtTime(.12, audio.currentTime); gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .6);
+            tone.connect(gain).connect(audio.destination); tone.start(); tone.stop(audio.currentTime + .6);
+          } catch { }
+          try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('CR Perfumería', { body: text, icon: '/nuevologo.jpg' }); } catch { }
+        }
+      }
+      knownPending.current = new Set(pending);
+    } catch (error) {
+      if (error.status !== 401) setWebError(error.message || 'No se pudieron cargar los pedidos online.');
+    } finally { setWebLoading(false); }
+  }, [request]);
+
+  useEffect(() => {
+    if (status !== 'ready') return undefined;
+    void loadWebOrders();
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadWebOrders(); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [loadWebOrders, status]);
+
+  useEffect(() => {
+    const count = (webData?.orders || []).filter(order => order.order_status === 'pending_review').length;
+    document.title = count ? `(${count}) CR Perfumería · Gestión` : 'CR Perfumería · Gestión';
+  }, [webData]);
+
+  const webOrderAction = async (order, action) => {
+    if (action === 'reject' && !window.confirm(`¿${order.order_status === 'pending_review' ? 'Rechazar' : 'Cancelar'} el pedido ${order.order_number}?\n\nEl stock reservado vuelve al inventario.`)) return;
+    setWebWorking(`${order.id}:${action}`);
+    try {
+      await request('/api/shop/web-orders', { method: 'POST', body: JSON.stringify({ orderId: order.id, action }) });
+      await loadWebOrders();
+      const done = { accept: 'Pedido aceptado.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado y stock devuelto.' }[action];
+      setToast(done); window.setTimeout(() => setToast(''), 3200);
+    } catch (error) {
+      setToast(error.message || 'No se pudo actualizar el pedido.'); window.setTimeout(() => setToast(''), 4200);
+    } finally { setWebWorking(''); }
+  };
+
+  const enableNotifications = async () => {
+    if (typeof Notification === 'undefined') return;
+    try { setNotificationsEnabled((await Notification.requestPermission()) === 'granted'); } catch { }
+  };
+
   const login = async event => {
     event.preventDefault();
     if (!password.trim()) { setMessage('Ingresá la clave de acceso del local.'); return; }
@@ -479,7 +553,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
 
   return (
     <>
-      <ManagementShell catalog={catalog} section={section} setSection={setSection} movements={movements} loadingMovements={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} />
+      <ManagementShell webOrders={{ data: webData, loading: webLoading, error: webError, refresh: loadWebOrders, act: webOrderAction, working: webWorking, notificationsEnabled, enableNotifications }} catalog={catalog} section={section} setSection={setSection} movements={movements} loadingMovements={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} />
       {editorOpen && <ProductEditor key={editorProduct?.barcode || 'new-product'} product={editorProduct} busy={savingProduct} error={editorError} setError={setEditorError} onClose={() => setEditorOpen(false)} onSave={saveProduct} />}
       {toast && <div className="management-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
     </>
