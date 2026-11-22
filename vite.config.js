@@ -1,13 +1,13 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { lookupEzCatalog } from './lib/ez-catalog.js';
-import { GET as getShopState } from './api/shop/state.js';
-import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './api/shop/session.js';
-import { POST as saveShopProduct, DELETE as resetShopProducts } from './api/shop/products.js';
-import { GET as listShopPurchases, POST as recordShopPurchase } from './api/shop/purchases.js';
-import { GET as listShopMovements } from './api/shop/movements.js';
-import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './api/shop/history.js';
-import { POST as saveShopCart } from './api/shop/cart.js';
+import { GET as getShopState } from './routes/shop/state.js';
+import { GET as checkShopSession, POST as createShopSession, DELETE as clearShopSession } from './routes/shop/session.js';
+import { POST as saveShopProduct, DELETE as resetShopProducts } from './routes/shop/products.js';
+import { GET as listShopPurchases, POST as recordShopPurchase } from './routes/shop/purchases.js';
+import { GET as listShopMovements } from './routes/shop/movements.js';
+import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './routes/shop/history.js';
+import { POST as saveShopCart } from './routes/shop/cart.js';
 
 function ezCatalogDevApi() {
   return {

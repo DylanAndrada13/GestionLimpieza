@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Banknote, BellRing, CheckCircle2, Copy, CreditCard, Loader2, Mail, MapPin, MessageCircle,
-  Phone, RefreshCw, Search, ShoppingBag, StickyNote, X,
+  AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Loader2, Mail, MapPin, MessageCircle,
+  Phone, RefreshCw, Search, ShoppingBag, StickyNote, Store, X,
 } from 'lucide-react';
 
 const money = value => `$${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value) || 0)}`;
@@ -19,6 +19,11 @@ export function timeAgo(value, now = Date.now()) {
   if (hours < 24) return `hace ${hours} h`;
   return dateTime(value);
 }
+
+const LOCAL_PICKUPS = ['Local Itatí', 'Local La Haya'];
+export const pickupKind = order => order.pickup_type || (LOCAL_PICKUPS.includes(order.pickup_point) ? 'local' : 'encuentro');
+const pickupDate = (iso, long = false) => new Intl.DateTimeFormat('es-AR', long ? { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' } : { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
+const pickupDates = order => (Array.isArray(order.pickup_dates) ? order.pickup_dates : []).filter(Boolean).sort();
 
 export const ORDER_LABEL = {
   pending_review: 'Nuevo, sin aceptar',
@@ -65,12 +70,22 @@ function whatsappNumber(phone) {
   return digits.length >= 8 ? `549${digits}` : '';
 }
 
+function whatsappText(order) {
+  const first = String(order.customer_name || '').split(' ')[0];
+  const dates = pickupDates(order);
+  const where = pickupKind(order) === 'local'
+    ? `Ya lo podés retirar en ${order.pickup_point}.`
+    : `Para el encuentro en ${order.pickup_point}${dates.length ? `, elegiste ${dates.map(d => pickupDate(d)).join(', ')}` : ''}. ¿Qué día y a qué hora te queda mejor?`;
+  return `Hola ${first}, te escribimos de CR Perfumería por tu pedido ${order.order_number}. ${where}`;
+}
+
 function orderSummary(order) {
   const lines = (order.web_order_items || []).map(item => `• ${item.quantity} × ${item.product_name} (${money(item.line_total ?? item.quantity * item.unit_price)})`);
   return [
     `Pedido ${order.order_number}`,
     `${order.customer_name}${order.customer_phone ? ` · ${order.customer_phone}` : ''}`,
-    `Retira en ${order.pickup_point}`,
+    `${pickupKind(order) === 'local' ? 'Retira en' : 'Punto de encuentro:'} ${order.pickup_point}`,
+    ...(pickupDates(order).length ? [`Fechas posibles: ${pickupDates(order).map(d => pickupDate(d)).join(', ')}`] : []),
     ...lines,
     `Total ${money(order.total_amount)} · ${METHOD_LABEL[order.payment_method] || order.payment_method} · ${PAYMENT_LABEL[order.payment_status] || order.payment_status}`,
   ].join('\n');
@@ -87,7 +102,7 @@ function OrderRow({ order, selected, onSelect, now }) {
       <span className="mg-order-row-top"><StatusChip status={order.order_status} /><time dateTime={order.created_at}>{timeAgo(order.created_at, now)}</time></span>
       <strong className="mg-order-row-name">{order.customer_name || order.customer_email}</strong>
       <span className="mg-order-row-meta">
-        <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {order.pickup_point}</span>
+        <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {pickupKind(order) === 'local' ? '' : 'Encuentro en '}{order.pickup_point}</span>
         <b>{money(order.total_amount)}</b>
       </span>
       <span className="mg-order-row-code">{order.order_number} · {order.payment_method === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}</span>
@@ -106,7 +121,7 @@ function Timeline({ order }) {
   return <ol className="mg-timeline">{steps.map(([label, at]) => <li key={label}><span>{label}</span><time dateTime={at}>{dateTime(at)}</time></li>)}</ol>;
 }
 
-function OrderTicket({ order, contactAvailable, working, onAction, onClose }) {
+function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, onClose }) {
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
   const [copied, setCopied] = useState(false);
@@ -144,11 +159,21 @@ function OrderTicket({ order, contactAvailable, working, onAction, onClose }) {
         <ul className="mg-contact">
           <li><Mail size={15} /><a href={`mailto:${order.customer_email}?subject=${encodeURIComponent(`Tu pedido ${order.order_number}`)}`}>{order.customer_email}</a></li>
           {order.customer_phone
-            ? <li><Phone size={15} /><a href={`tel:${String(order.customer_phone).replace(/[^\d+]/g, '')}`}>{order.customer_phone}</a>{wa && <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(`Hola ${String(order.customer_name || '').split(' ')[0]}, te escribimos de CR Perfumería por tu pedido ${order.order_number}.`)}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}</li>
+            ? <li><Phone size={15} /><a href={`tel:${String(order.customer_phone).replace(/[^\d+]/g, '')}`}>{order.customer_phone}</a>{wa && <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(whatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}</li>
             : <li className="is-muted"><Phone size={15} />{contactAvailable ? 'No dejó teléfono (pedido anterior al cambio)' : 'Teléfono no disponible: falta correr la migración de contacto en Supabase'}</li>}
-          <li><MapPin size={15} />Retira en <strong>{order.pickup_point}</strong></li>
         </ul>
         {order.customer_note && <blockquote className="mg-buyer-note">{order.customer_note}</blockquote>}
+      </section>
+
+      <section className="mg-ticket-block">
+        <h3>Retiro</h3>
+        <p className="mg-pickup">{pickupKind(order) === 'local' ? <Store size={17} /> : <MapPin size={17} />}<span><strong>{order.pickup_point}</strong><small>{pickupKind(order) === 'local' ? 'Retiro en el local, en horario de atención' : 'Punto de encuentro: confirmale por WhatsApp una de las fechas y la hora'}</small></span></p>
+        {pickupDates(order).length > 0 && (
+          <ul className="mg-pickup-dates" aria-label="Fechas posibles que eligió el comprador">
+            {pickupDates(order).map(date => <li key={date}><CalendarDays size={15} />{pickupDate(date, true)}</li>)}
+          </ul>
+        )}
+        {pickupKind(order) === 'encuentro' && !pickupDates(order).length && <p className="mg-pickup-missing">{pickupInfo ? 'El comprador no dejó fechas (pedido anterior al cambio).' : 'Para ver las fechas que eligió, corré en Supabase la migración 202611220004 de la tienda.'}</p>}
       </section>
 
       <section className="mg-ticket-block">
@@ -223,7 +248,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
   const visible = useMemo(() => {
     const test = FILTERS.find(([id]) => id === filter)?.[2] || (() => true);
     const query = term.trim().toLocaleLowerCase('es');
-    const list = orders.filter(order => test(order) && (!query || [order.order_number, order.customer_name, order.customer_email, order.customer_phone, order.pickup_point].some(value => String(value || '').toLocaleLowerCase('es').includes(query))));
+    const list = orders.filter(order => test(order) && (!query || [order.order_number, order.customer_name, order.customer_email, order.customer_phone, order.pickup_point, ...pickupDates(order)].some(value => String(value || '').toLocaleLowerCase('es').includes(query))));
     // To attend: new ones first, then oldest first so nobody waits twice. Other views: newest first.
     return filter === 'attention' ? [...list].sort((a, b) => (a.order_status === 'pending_review' ? 0 : 1) - (b.order_status === 'pending_review' ? 0 : 1) || new Date(a.created_at) - new Date(b.created_at)) : list;
   }, [orders, filter, term]);
@@ -245,6 +270,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       {data && !data.available && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Todavía no existen las tablas de pedidos online en Supabase.</div>}
       {data?.available && !data.migrated && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Falta correr la migración de pedidos en efectivo y stock en Supabase. Hasta entonces no se pueden aceptar ni cerrar pedidos desde acá.</div>}
       {data?.available && data.migrated && data.contact === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver el teléfono y la nota del comprador, corré en Supabase la migración 202611220003 de la tienda.</div>}
+      {data?.available && data.contact && data.pickup === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver si retiran en el local o en un punto de encuentro, y las 3 fechas que eligieron, corré en Supabase la migración 202611220004 de la tienda.</div>}
       {error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{error}</div>}
 
       <div className="mg-toolbar">
@@ -265,7 +291,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
         </div>
         <div className="mg-order-detail">
           {selected
-            ? <OrderTicket order={selected} contactAvailable={data?.contact !== false} working={working} onAction={onAction} onClose={() => onSelect('')} />
+            ? <OrderTicket order={selected} contactAvailable={data?.contact !== false} pickupInfo={data?.pickup !== false} working={working} onAction={onAction} onClose={() => onSelect('')} />
             : <div className="mg-empty mg-detail-empty"><ShoppingBag size={26} /><p>Elegí un pedido de la lista para ver el comprador, los productos y el pago.</p></div>}
         </div>
       </div>

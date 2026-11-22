@@ -374,3 +374,65 @@
 }
 .mg-table th.mg-num { text-align: right; }
 .mg-app.is-light .mg-ticket { background: #fcfcfa; box-shadow: inset 0 0 0 1px var(--line); }
+
+/* Status colours: bright and unmistakable. Red = wrong or missing, amber = waiting on the local, green = fine. */
+.mg-app, .mg-screen {
+  --new: #ffb21e;
+  --work: #4ea8ff;
+  --ready: #2fd47a;
+  --danger: #ff4a3d;
+  --done: #2fd47a;
+}
+.mg-app.is-light, .mg-screen.is-light {
+  --new: #d97800;
+  --work: #1f6fd1;
+  --ready: #109a4c;
+  --danger: #e0271a;
+  --done: #109a4c;
+}
+.mg-chip.tone-new { background: var(--new); color: #241500; }
+.mg-chip.tone-work { background: var(--work); color: #fff; }
+.mg-chip.tone-ready { background: var(--ready); color: #04210f; }
+.mg-chip.tone-off { background: var(--danger); color: #fff; }
+.mg-chip.tone-done { color: var(--done); background: color-mix(in srgb, var(--done) 16%, transparent); }
+.mg-ticket .mg-chip.tone-new { background: #ffb21e; color: #241500; }
+.mg-ticket .mg-chip.tone-work { background: #1f6fd1; color: #fff; }
+.mg-ticket .mg-chip.tone-ready { background: #109a4c; color: #fff; }
+.mg-ticket .mg-chip.tone-off { background: #e0271a; color: #fff; }
+.mg-ticket .mg-chip.tone-done { background: #dcf4e5; color: #0d7a3c; }
+.mg-stock { display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: 12px; font-size: 13px; }
+.mg-stock.is-ok { color: var(--ready); background: color-mix(in srgb, var(--ready) 14%, transparent); }
+.mg-stock.is-low { color: #241500; background: var(--new); }
+.mg-stock.is-empty { color: #fff; background: var(--danger); }
+.mg-notice.tone-danger { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, var(--panel)); }
+.mg-notice.tone-new { border-color: var(--new); background: color-mix(in srgb, var(--new) 18%, var(--panel)); }
+.mg-ticket .mg-notice.tone-danger { background: #ffe1dd; border-color: #e0271a; }
+.mg-ticket .mg-notice.tone-new { background: #fff0cf; border-color: #ffb21e; }
+.mg-ticket-pay dd.is-ok { color: #0d8a43; }
+.mg-ticket-pay dd.is-bad { color: #d0241a; }
+.mg-btn.danger-ghost { color: var(--danger); border-color: var(--danger); }
+.mg-btn.danger { background: var(--danger); }
+.mg-ticket .mg-btn.danger-ghost { color: #d0241a; border-color: #e0271a; }
+.mg-ticket .mg-btn.danger { background: #e0271a; }
+.mg-dot.tone-new { box-shadow: 0 0 0 3px color-mix(in srgb, var(--new) 30%, transparent); }
+.mg-hero-orders.has-new { border-color: var(--new); box-shadow: inset 4px 0 var(--new); }
+.mg-order-row.is-new { box-shadow: inset 4px 0 var(--new); }
+.mg-empty-inline svg, .mg-state.is-ok { color: var(--ready); }
+.mg-toast.tone-danger { border-color: #ff4a3d; background: #3a1512; }
+.mg-toast.tone-new { background: #3a2a0b; }
+
+/* Pickup on the ticket */
+.mg-pickup { display: flex; align-items: flex-start; gap: 10px; margin: 0; }
+.mg-pickup > svg { flex: none; margin-top: 3px; color: var(--paper-muted); }
+.mg-pickup > span { display: flex; flex-direction: column; }
+.mg-pickup strong { font-size: 17px; font-weight: 650; }
+.mg-pickup small { color: var(--paper-muted); font-size: 13px; }
+.mg-pickup-dates { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.mg-pickup-dates li { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1.5px solid #23252a; border-radius: 6px; font-weight: 600; }
+.mg-pickup-dates li::first-letter { text-transform: uppercase; }
+.mg-pickup-missing { margin: 10px 0 0; color: var(--paper-muted); font-size: 13px; }
+
+/* Theme switch in the top bar */
+.mg-theme-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 16px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+.mg-theme-toggle:hover { background: var(--panel-2); }
+.mg-theme-toggle svg { color: var(--gold); }

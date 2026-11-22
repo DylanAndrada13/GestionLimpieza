@@ -4,6 +4,58 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/catalog/contribute",
+      "destination": "/api/handler?route=catalog/contribute"
+    },
+    {
+      "source": "/api/catalog/lookup",
+      "destination": "/api/handler?route=catalog/lookup"
+    },
+    {
+      "source": "/api/catalog/search",
+      "destination": "/api/handler?route=catalog/search"
+    },
+    {
+      "source": "/api/ez-catalog/lookup",
+      "destination": "/api/handler?route=ez-catalog/lookup"
+    },
+    {
+      "source": "/api/shop/cart",
+      "destination": "/api/handler?route=shop/cart"
+    },
+    {
+      "source": "/api/shop/history",
+      "destination": "/api/handler?route=shop/history"
+    },
+    {
+      "source": "/api/shop/movements",
+      "destination": "/api/handler?route=shop/movements"
+    },
+    {
+      "source": "/api/shop/products",
+      "destination": "/api/handler?route=shop/products"
+    },
+    {
+      "source": "/api/shop/purchases",
+      "destination": "/api/handler?route=shop/purchases"
+    },
+    {
+      "source": "/api/shop/session",
+      "destination": "/api/handler?route=shop/session"
+    },
+    {
+      "source": "/api/shop/state",
+      "destination": "/api/handler?route=shop/state"
+    },
+    {
+      "source": "/api/shop/web-orders",
+      "destination": "/api/handler?route=shop/web-orders"
+    },
+    {
+      "source": "/api/upcitemdb/lookup",
+      "destination": "/api/handler?route=upcitemdb/lookup"
+    },
+    {
       "source": "/gestion",
       "destination": "/index.html"
     },

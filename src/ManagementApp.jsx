@@ -12,6 +12,7 @@ import {
   Home,
   Loader2,
   LogOut,
+  Moon,
   Package,
   PackagePlus,
   Pencil,
@@ -21,6 +22,7 @@ import {
   Settings,
   ShoppingBag,
   ShoppingCart,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
@@ -55,6 +57,9 @@ const NAV = [
   { group: 'Inventario', items: [
     { id: 'products', label: 'Productos', icon: Package },
     { id: 'movements', label: 'Movimientos', icon: ArrowDownUp },
+  ] },
+  { group: 'Local', items: [
+    { id: 'settings', label: 'Configuración', icon: Settings },
   ] },
 ];
 const SECTION_IDS = ['home', 'orders', 'products', 'movements', 'settings'];
@@ -220,7 +225,7 @@ function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode, initi
                     <td><span className="mg-table-product"><span className="mg-thumb">{item.image ? <img src={item.image} alt="" loading="lazy" /> : <Package size={17} />}</span><span><strong>{item.name}</strong><small>{[item.brand, item.quantity, item.category].filter(Boolean).join(' · ') || 'Sin detalle'}</small></span></span></td>
                     <td className="mg-code">{item.barcode}</td>
                     <td className="mg-num mg-price">{money(item.price)}</td>
-                    <td className="mg-num"><span className={`mg-stock ${stock === 0 ? 'is-empty' : stock <= LOW_STOCK ? 'is-low' : ''}`}>{stock === 0 ? 'Sin stock' : `${number(stock)} u.`}</span></td>
+                    <td className="mg-num"><span className={`mg-stock ${stock === 0 ? 'is-empty' : stock <= LOW_STOCK ? 'is-low' : 'is-ok'}`}>{stock === 0 ? 'Sin stock' : `${number(stock)} u.`}</span></td>
                     <td><div className="mg-row-actions"><button type="button" className="mg-icon-btn" onClick={() => onEdit(item)} aria-label={`Editar ${item.name}`}><Pencil size={16} /></button><button type="button" className="mg-icon-btn danger" onClick={() => onDelete(item)} disabled={Boolean(deletingBarcode)} aria-label={`Eliminar ${item.name}`}>{deletingBarcode === item.barcode ? <Loader2 size={16} className="mg-spin" /> : <Trash2 size={16} />}</button></div></td>
                   </tr>
                 );
@@ -350,7 +355,7 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
   );
 }
 
-function ManagementShell({ section, onSection, theme, onSales, onLogout, webOrders, lastSync, syncing, onRefreshAll, children }) {
+function ManagementShell({ section, onSection, theme, onThemeChange, onSales, onLogout, webOrders, lastSync, syncing, onRefreshAll, children }) {
   const orders = webOrders.data?.orders || [];
   const attentionCount = orders.filter(needsAttention).length;
   const newCount = orders.filter(order => order.order_status === 'pending_review').length;
@@ -379,7 +384,6 @@ function ManagementShell({ section, onSection, theme, onSales, onLogout, webOrde
           ))}
         </nav>
         <div className="mg-sidebar-foot">
-          <button type="button" className={`mg-nav-item ${section === 'settings' ? 'is-active' : ''}`} onClick={() => onSection('settings')} aria-current={section === 'settings' ? 'page' : undefined}><Settings size={18} /><span>Configuración</span></button>
           <button type="button" className="mg-nav-item" onClick={onSales}><ShoppingCart size={18} /><span>Modo venta</span></button>
           <button type="button" className="mg-nav-item is-quiet" onClick={onLogout}><LogOut size={18} /><span>Cerrar sesión</span></button>
         </div>
@@ -391,6 +395,7 @@ function ManagementShell({ section, onSection, theme, onSales, onLogout, webOrde
             {syncing ? <Loader2 size={14} className="mg-spin" /> : <RefreshCw size={14} />}
             <span>{lastSync ? `Inventario al día · revisado ${timeAgo(lastSync, now)}` : 'Conectando…'}</span>
           </button>
+          <button type="button" className="mg-theme-toggle" onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Pasar a modo oscuro' : 'Pasar a modo claro'} title={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}>{theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}<span>{theme === 'light' ? 'Modo oscuro' : 'Modo claro'}</span></button>
           {newCount > 0 && section !== 'orders' && <button type="button" className="mg-new-orders" onClick={() => onSection('orders')}><BellRing size={15} /> {newCount === 1 ? '1 pedido nuevo' : `${newCount} pedidos nuevos`}</button>}
         </header>
         <div className="mg-content">{children}</div>
@@ -668,7 +673,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
   const orders = webData?.orders || [];
   return (
     <>
-      <ManagementShell section={section} onSection={setSection} theme={theme} onSales={onSales} onLogout={logout} webOrders={{ data: webData }} lastSync={lastSync} syncing={syncing} onRefreshAll={refreshAll}>
+      <ManagementShell section={section} onSection={setSection} theme={theme} onThemeChange={onThemeChange} onSales={onSales} onLogout={logout} webOrders={{ data: webData }} lastSync={lastSync} syncing={syncing} onRefreshAll={refreshAll}>
         {section === 'home' && <Dashboard catalog={catalog} orders={orders} onSection={setSection} onOpenOrder={openOrder} onEdit={openEditor} />}
         {section === 'orders' && <WebOrdersPage data={webData} loading={webLoading} error={webError} onRefresh={loadWebOrders} onAction={webOrderAction} working={webWorking} notificationsEnabled={notificationsEnabled} onEnableNotifications={enableNotifications} selectedId={selectedOrderId} onSelect={setSelectedOrderId} lastLoaded={webLoaded} />}
         {section === 'products' && <ProductsPage catalog={catalog} onEdit={openEditor} onAdd={() => openEditor(null)} onDelete={deleteProduct} deletingBarcode={deletingBarcode} initialFilter={productFilter} />}
