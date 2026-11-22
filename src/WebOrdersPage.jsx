@@ -1,11 +1,24 @@
-import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Bell, BellRing, CheckCircle2, Clock3, Globe, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle, Banknote, BellRing, CheckCircle2, Copy, CreditCard, Loader2, Mail, MapPin, MessageCircle,
+  Phone, RefreshCw, Search, ShoppingBag, StickyNote, X,
+} from 'lucide-react';
 
-const money = value => `$${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(Number(value) || 0)}`;
+const money = value => `$${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value) || 0)}`;
 const dateTime = value => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
 };
+export function timeAgo(value, now = Date.now()) {
+  const date = new Date(value).getTime();
+  if (!Number.isFinite(date)) return '';
+  const minutes = Math.round((now - date) / 60000);
+  if (minutes < 1) return 'recién';
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  return dateTime(value);
+}
 
 export const ORDER_LABEL = {
   pending_review: 'Nuevo, sin aceptar',
@@ -16,97 +29,246 @@ export const ORDER_LABEL = {
   delivered: 'Entregado',
   cancelled: 'Cancelado',
 };
+const PAYMENT_LABEL = { pending: 'Sin pagar', pending_verification: 'Pago en revisión', paid: 'Pagado', failed: 'Pago rechazado o anulado', refunded: 'Devuelto' };
+const METHOD_LABEL = { efectivo: 'Efectivo al retirar', mercado_pago: 'Mercado Pago', transferencia: 'Transferencia' };
+const TONE = { pending_review: 'new', confirmed: 'new', preparing: 'work', ready_for_pickup: 'ready', delivered: 'done', cancelled: 'off', awaiting_payment: 'wait' };
 
 // Orders the local has to act on: new cash orders and paid or accepted orders not delivered yet.
 export const needsAttention = order => ['pending_review', 'confirmed', 'preparing', 'ready_for_pickup'].includes(order.order_status);
-const isClosed = order => ['delivered', 'cancelled'].includes(order.order_status) || (order.order_status === 'awaiting_payment');
 
 const FILTERS = [
-  ['attention', 'Para atender'],
-  ['pending_review', 'Nuevos'],
-  ['closed', 'Cerrados y sin pagar'],
-  ['all', 'Todos'],
+  ['attention', 'Para atender', needsAttention],
+  ['awaiting_payment', 'Esperando pago', order => order.order_status === 'awaiting_payment'],
+  ['closed', 'Cerrados', order => ['delivered', 'cancelled'].includes(order.order_status)],
+  ['all', 'Todos', () => true],
 ];
 
 function actionsFor(order) {
   const cash = order.payment_method === 'efectivo';
   switch (order.order_status) {
     case 'pending_review': return [['accept', 'Aceptar pedido', 'primary'], ['reject', 'Rechazar', 'danger']];
-    case 'confirmed': return [['ready', 'Listo para retirar', 'secondary'], ['deliver', 'Entregado', 'primary']];
-    case 'preparing': return [['ready', 'Listo para retirar', 'secondary'], ['deliver', cash ? 'Cobrado y entregado' : 'Entregado', 'primary'], ...(cash ? [['reject', 'Cancelar', 'danger']] : [])];
-    case 'ready_for_pickup': return [['deliver', cash ? 'Cobrado y entregado' : 'Entregado', 'primary'], ...(cash ? [['reject', 'Cancelar', 'danger']] : [])];
+    case 'confirmed': return [['deliver', 'Entregado', 'primary'], ['ready', 'Listo para retirar', 'secondary']];
+    case 'preparing': return [['ready', 'Listo para retirar', 'primary'], ['deliver', cash ? 'Cobrado y entregado' : 'Entregado', 'secondary'], ...(cash ? [['reject', 'Cancelar pedido', 'danger']] : [])];
+    case 'ready_for_pickup': return [['deliver', cash ? 'Cobrado y entregado' : 'Entregado', 'primary'], ...(cash ? [['reject', 'Cancelar pedido', 'danger']] : [])];
     default: return [];
   }
 }
 
-export default function WebOrdersPage({ data, loading, error, onRefresh, onAction, working, notificationsEnabled, onEnableNotifications }) {
-  const [filter, setFilter] = useState('attention');
-  const orders = data?.orders || [];
-  const newCount = orders.filter(order => order.order_status === 'pending_review').length;
-  const visible = useMemo(() => orders.filter(order => (
-    filter === 'all' ? true
-      : filter === 'pending_review' ? order.order_status === 'pending_review'
-        : filter === 'closed' ? isClosed(order)
-          : needsAttention(order)
-  )), [orders, filter]);
+// Argentine numbers for a wa.me link: country 54, mobile 9, without the trunk 0.
+function whatsappNumber(phone) {
+  let digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('54')) digits = digits.slice(2);
+  if (digits.startsWith('9')) digits = digits.slice(1);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits.length >= 8 ? `549${digits}` : '';
+}
+
+function orderSummary(order) {
+  const lines = (order.web_order_items || []).map(item => `• ${item.quantity} × ${item.product_name} (${money(item.line_total ?? item.quantity * item.unit_price)})`);
+  return [
+    `Pedido ${order.order_number}`,
+    `${order.customer_name}${order.customer_phone ? ` · ${order.customer_phone}` : ''}`,
+    `Retira en ${order.pickup_point}`,
+    ...lines,
+    `Total ${money(order.total_amount)} · ${METHOD_LABEL[order.payment_method] || order.payment_method} · ${PAYMENT_LABEL[order.payment_status] || order.payment_status}`,
+  ].join('\n');
+}
+
+function StatusChip({ status }) {
+  return <span className={`mg-chip tone-${TONE[status] || 'wait'}`}><i />{ORDER_LABEL[status] || status}</span>;
+}
+
+function OrderRow({ order, selected, onSelect, now }) {
+  const units = (order.web_order_items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  return (
+    <button type="button" className={`mg-order-row ${selected ? 'is-selected' : ''} ${order.order_status === 'pending_review' ? 'is-new' : ''}`} onClick={() => onSelect(order.id)} aria-current={selected ? 'true' : undefined}>
+      <span className="mg-order-row-top"><StatusChip status={order.order_status} /><time dateTime={order.created_at}>{timeAgo(order.created_at, now)}</time></span>
+      <strong className="mg-order-row-name">{order.customer_name || order.customer_email}</strong>
+      <span className="mg-order-row-meta">
+        <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {order.pickup_point}</span>
+        <b>{money(order.total_amount)}</b>
+      </span>
+      <span className="mg-order-row-code">{order.order_number} · {order.payment_method === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}</span>
+    </button>
+  );
+}
+
+function Timeline({ order }) {
+  const steps = [
+    ['Pedido hecho', order.created_at],
+    order.reviewed_at && [order.order_status === 'cancelled' && !order.delivered_at ? 'Revisado por el local' : 'Aceptado por el local', order.reviewed_at],
+    order.paid_at && ['Pago confirmado', order.paid_at],
+    order.delivered_at && ['Entregado', order.delivered_at],
+    order.stock_restored_at && ['Stock devuelto al inventario', order.stock_restored_at],
+  ].filter(Boolean).sort((a, b) => new Date(a[1]) - new Date(b[1]));
+  return <ol className="mg-timeline">{steps.map(([label, at]) => <li key={label}><span>{label}</span><time dateTime={at}>{dateTime(at)}</time></li>)}</ol>;
+}
+
+function OrderTicket({ order, contactAvailable, working, onAction, onClose }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [note, setNote] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setRejecting(false); setNote(''); setCopied(false); }, [order.id]);
+
+  const cash = order.payment_method === 'efectivo';
+  const items = order.web_order_items || [];
+  const units = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const wa = whatsappNumber(order.customer_phone);
+  const actions = actionsFor(order);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(orderSummary(order)); setCopied(true); window.setTimeout(() => setCopied(false), 2200); } catch { }
+  };
 
   return (
-    <>
-      <div className="management-page-heading">
-        <div><span className="management-eyebrow">Tienda online</span><h1>Pedidos online</h1><p>Pedidos hechos desde la tienda web. Se actualizan solos cada 30 segundos.</p></div>
-        <div className="web-orders-heading-actions">
-          {notificationsEnabled === false && <button type="button" className="management-secondary" onClick={onEnableNotifications}><BellRing size={17} /> Activar avisos</button>}
-          <button type="button" className="management-secondary" onClick={onRefresh} disabled={loading}>{loading ? <Loader2 size={17} className="management-spin" /> : <RefreshCw size={17} />} Actualizar</button>
+    <article className="mg-ticket" aria-labelledby="mg-ticket-title">
+      <header className="mg-ticket-head">
+        <div>
+          <h2 id="mg-ticket-title">{order.order_number}</h2>
+          <p>Hecho el {dateTime(order.created_at)}</p>
+        </div>
+        <div className="mg-ticket-head-side">
+          <StatusChip status={order.order_status} />
+          <button type="button" className="mg-icon-btn mg-ticket-close" onClick={onClose} aria-label="Cerrar detalle"><X size={18} /></button>
+        </div>
+      </header>
+
+      {order.order_status === 'pending_review' && <div className="mg-notice tone-new"><BellRing size={17} />Pedido nuevo en efectivo. El stock ya está reservado: aceptalo para prepararlo o rechazalo para devolverlo.</div>}
+      {order.stock_shortage?.length > 0 && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Faltó stock al descontar {order.stock_shortage.length === 1 ? 'un producto' : `${order.stock_shortage.length} productos`}: {order.stock_shortage.map(s => `${s.barcode} (pedido ${s.requested}, había ${s.available})`).join(', ')}.</div>}
+      {order.status_note && <div className="mg-notice"><StickyNote size={17} />Motivo registrado: {order.status_note}</div>}
+
+      <section className="mg-ticket-block">
+        <h3>Comprador</h3>
+        <p className="mg-buyer-name">{order.customer_name}</p>
+        <ul className="mg-contact">
+          <li><Mail size={15} /><a href={`mailto:${order.customer_email}?subject=${encodeURIComponent(`Tu pedido ${order.order_number}`)}`}>{order.customer_email}</a></li>
+          {order.customer_phone
+            ? <li><Phone size={15} /><a href={`tel:${String(order.customer_phone).replace(/[^\d+]/g, '')}`}>{order.customer_phone}</a>{wa && <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(`Hola ${String(order.customer_name || '').split(' ')[0]}, te escribimos de CR Perfumería por tu pedido ${order.order_number}.`)}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}</li>
+            : <li className="is-muted"><Phone size={15} />{contactAvailable ? 'No dejó teléfono (pedido anterior al cambio)' : 'Teléfono no disponible: falta correr la migración de contacto en Supabase'}</li>}
+          <li><MapPin size={15} />Retira en <strong>{order.pickup_point}</strong></li>
+        </ul>
+        {order.customer_note && <blockquote className="mg-buyer-note">{order.customer_note}</blockquote>}
+      </section>
+
+      <section className="mg-ticket-block">
+        <h3>Productos <span>{units} {units === 1 ? 'unidad' : 'unidades'}</span></h3>
+        <table className="mg-ticket-items">
+          <thead><tr><th scope="col">Cant.</th><th scope="col">Producto</th><th scope="col">Precio</th><th scope="col">Subtotal</th></tr></thead>
+          <tbody>
+            {items.map((item, index) => (
+              <tr key={`${item.product_barcode}-${index}`}>
+                <td className="mg-qty">{item.quantity}</td>
+                <td><span className="mg-item-name">{item.product_name}</span>{item.product_barcode && <small>{item.product_barcode}</small>}</td>
+                <td className="mg-num">{money(item.unit_price)}</td>
+                <td className="mg-num">{money(item.line_total ?? item.quantity * item.unit_price)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr><th scope="row" colSpan="3">Total</th><td className="mg-num">{money(order.total_amount)}</td></tr></tfoot>
+        </table>
+      </section>
+
+      <section className="mg-ticket-block mg-ticket-pay">
+        <h3>Pago</h3>
+        <dl>
+          <div><dt>Medio</dt><dd>{cash ? <Banknote size={15} /> : <CreditCard size={15} />}{METHOD_LABEL[order.payment_method] || order.payment_method}</dd></div>
+          <div><dt>Estado</dt><dd className={order.payment_status === 'paid' ? 'is-ok' : order.payment_status === 'failed' ? 'is-bad' : ''}>{order.payment_status === 'paid' && <CheckCircle2 size={15} />}{cash && order.payment_status === 'pending' ? 'A cobrar al retirar' : PAYMENT_LABEL[order.payment_status] || order.payment_status}</dd></div>
+          {order.paid_at && <div><dt>Pagado</dt><dd>{dateTime(order.paid_at)}</dd></div>}
+          {order.mp_payment_id && <div><dt>Operación MP</dt><dd className="mg-code">{order.mp_payment_id}</dd></div>}
+          <div><dt>Stock</dt><dd>{order.stock_restored_at ? 'Devuelto al inventario' : order.stock_applied_at ? 'Descontado del inventario' : order.payment_method === 'mercado_pago' ? 'Se descuenta cuando se confirma el pago' : 'Sin descontar'}</dd></div>
+        </dl>
+      </section>
+
+      <section className="mg-ticket-block">
+        <h3>Historial</h3>
+        <Timeline order={order} />
+      </section>
+
+      <footer className="mg-ticket-actions">
+        {rejecting ? (
+          <form className="mg-reject" onSubmit={event => { event.preventDefault(); onAction(order, 'reject', note); }}>
+            <label htmlFor="mg-reject-note">Motivo (opcional, queda guardado en el pedido)</label>
+            <input id="mg-reject-note" value={note} onChange={event => setNote(event.target.value)} maxLength={300} placeholder="Por ejemplo, no pasó a retirarlo" autoFocus />
+            <div>
+              <button type="button" className="mg-btn ghost" onClick={() => setRejecting(false)}>Volver</button>
+              <button type="submit" className="mg-btn danger" disabled={Boolean(working)}>{working === `${order.id}:reject` && <Loader2 size={16} className="mg-spin" />}{order.order_status === 'pending_review' ? 'Rechazar y devolver stock' : 'Cancelar y devolver stock'}</button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="mg-ticket-actions-main">
+              {actions.map(([action, label, tone]) => (
+                <button key={action} type="button" className={`mg-btn ${tone === 'primary' ? 'primary' : tone === 'danger' ? 'danger-ghost' : 'ghost'}`} disabled={Boolean(working)} onClick={() => (action === 'reject' ? setRejecting(true) : onAction(order, action))}>
+                  {working === `${order.id}:${action}` && <Loader2 size={16} className="mg-spin" />}{label}
+                </button>
+              ))}
+              {!actions.length && <span className="mg-muted">{order.order_status === 'awaiting_payment' ? 'Esperando que Mercado Pago confirme el pago. No hay nada para hacer todavía.' : 'Pedido cerrado.'}</span>}
+            </div>
+            <button type="button" className="mg-btn ghost" onClick={copy}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}{copied ? 'Copiado' : 'Copiar resumen'}</button>
+          </>
+        )}
+      </footer>
+    </article>
+  );
+}
+
+export default function WebOrdersPage({ data, loading, error, onRefresh, onAction, working, notificationsEnabled, onEnableNotifications, selectedId, onSelect, lastLoaded }) {
+  const [filter, setFilter] = useState('attention');
+  const [term, setTerm] = useState('');
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
+
+  const orders = data?.orders || [];
+  const visible = useMemo(() => {
+    const test = FILTERS.find(([id]) => id === filter)?.[2] || (() => true);
+    const query = term.trim().toLocaleLowerCase('es');
+    const list = orders.filter(order => test(order) && (!query || [order.order_number, order.customer_name, order.customer_email, order.customer_phone, order.pickup_point].some(value => String(value || '').toLocaleLowerCase('es').includes(query))));
+    // To attend: new ones first, then oldest first so nobody waits twice. Other views: newest first.
+    return filter === 'attention' ? [...list].sort((a, b) => (a.order_status === 'pending_review' ? 0 : 1) - (b.order_status === 'pending_review' ? 0 : 1) || new Date(a.created_at) - new Date(b.created_at)) : list;
+  }, [orders, filter, term]);
+  const selected = orders.find(order => order.id === selectedId) || null;
+
+  return (
+    <div className="mg-page mg-orders-page">
+      <div className="mg-page-head">
+        <div>
+          <h1>Pedidos online</h1>
+          <p>Pedidos de la tienda web. Se revisan solos cada 30 segundos{lastLoaded ? `; última revisión ${timeAgo(lastLoaded, now)}` : ''}.</p>
+        </div>
+        <div className="mg-page-actions">
+          {notificationsEnabled === false && <button type="button" className="mg-btn ghost" onClick={onEnableNotifications}><BellRing size={16} /> Activar avisos</button>}
+          <button type="button" className="mg-btn ghost" onClick={onRefresh} disabled={loading}>{loading ? <Loader2 size={16} className="mg-spin" /> : <RefreshCw size={16} />} Revisar ahora</button>
         </div>
       </div>
 
-      {data && !data.available && <div className="web-orders-notice warning"><AlertTriangle size={18} />Todavía no existen las tablas de pedidos online en Supabase.</div>}
-      {data?.available && !data.migrated && <div className="web-orders-notice warning"><AlertTriangle size={18} />Falta correr la migración de pedidos en efectivo y stock en Supabase. Hasta entonces no se pueden aceptar ni cerrar pedidos desde acá.</div>}
-      {error && <div className="web-orders-notice danger"><AlertTriangle size={18} />{error}</div>}
-      {newCount > 0 && <div className="web-orders-notice gold"><Bell size={18} />Tenés {newCount} {newCount === 1 ? 'pedido nuevo en efectivo' : 'pedidos nuevos en efectivo'} para aceptar o rechazar. El stock ya quedó reservado.</div>}
+      {data && !data.available && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Todavía no existen las tablas de pedidos online en Supabase.</div>}
+      {data?.available && !data.migrated && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Falta correr la migración de pedidos en efectivo y stock en Supabase. Hasta entonces no se pueden aceptar ni cerrar pedidos desde acá.</div>}
+      {data?.available && data.migrated && data.contact === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver el teléfono y la nota del comprador, corré en Supabase la migración 202611220003 de la tienda.</div>}
+      {error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{error}</div>}
 
-      <div className="web-orders-filters" role="tablist" aria-label="Filtrar pedidos">
-        {FILTERS.map(([value, label]) => {
-          const count = value === 'pending_review' ? newCount : value === 'attention' ? orders.filter(needsAttention).length : null;
-          return <button key={value} type="button" role="tab" aria-selected={filter === value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{label}{count ? <b>{count}</b> : null}</button>;
-        })}
+      <div className="mg-toolbar">
+        <div className="mg-tabs" role="tablist" aria-label="Filtrar pedidos">
+          {FILTERS.map(([id, label, test]) => {
+            const count = id === 'all' ? null : orders.filter(test).length;
+            return <button key={id} type="button" role="tab" aria-selected={filter === id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}{count ? <b>{count}</b> : null}</button>;
+          })}
+        </div>
+        <label className="mg-search"><Search size={16} /><input value={term} onChange={event => setTerm(event.target.value)} placeholder="Buscar por nombre, mail, teléfono o número" aria-label="Buscar pedidos" /></label>
       </div>
 
-      {loading && !data && <div className="web-orders-empty"><Loader2 size={24} className="management-spin" /><p>Cargando pedidos…</p></div>}
-      {data && visible.length === 0 && <div className="web-orders-empty"><Globe size={26} /><p>{filter === 'attention' ? 'No hay pedidos para atender ahora.' : 'No hay pedidos en esta vista.'}</p></div>}
-
-      <section className="web-orders-grid">
-        {visible.map(order => {
-          const cash = order.payment_method === 'efectivo';
-          return (
-            <article key={order.id} className={`management-panel web-order ${order.order_status === 'pending_review' ? 'is-new' : ''}`}>
-              <header>
-                <div><strong>{order.order_number}</strong><small><Clock3 size={13} /> {dateTime(order.created_at)}</small></div>
-                <span className={`web-order-status ${order.order_status}`}>{ORDER_LABEL[order.order_status] || order.order_status}</span>
-              </header>
-              <p className="web-order-customer"><strong>{order.customer_name}</strong><span>{order.customer_email}</span></p>
-              <p className="web-order-pickup"><MapPin size={15} /> Retira en {order.pickup_point}</p>
-              <ul className="web-order-items">
-                {(order.web_order_items || []).map((item, index) => <li key={`${item.product_barcode}-${index}`}><span>{item.quantity} ×</span> {item.product_name}<em>{money(item.line_total ?? item.quantity * item.unit_price)}</em></li>)}
-              </ul>
-              {order.stock_shortage?.length > 0 && <div className="web-orders-notice danger small"><AlertTriangle size={16} />Faltó stock de {order.stock_shortage.length === 1 ? 'un producto' : `${order.stock_shortage.length} productos`} al descontar. Revisalo antes de prepararlo.</div>}
-              <footer>
-                <span className={`web-order-pay ${order.payment_status === 'paid' ? 'paid' : ''}`}>{order.payment_status === 'paid' ? <CheckCircle2 size={15} /> : null}{cash ? 'Efectivo al retirar' : 'Mercado Pago'} · {order.payment_status === 'paid' ? 'pagado' : order.payment_status === 'failed' ? 'sin pago' : 'a cobrar'}</span>
-                <strong>{money(order.total_amount)}</strong>
-              </footer>
-              {actionsFor(order).length > 0 && (
-                <div className="web-order-actions">
-                  {actionsFor(order).map(([action, label, tone]) => (
-                    <button key={action} type="button" className={tone === 'primary' ? 'management-primary' : tone === 'danger' ? 'management-secondary danger' : 'management-secondary'} disabled={Boolean(working)} onClick={() => onAction(order, action)}>
-                      {working === `${order.id}:${action}` ? <Loader2 size={16} className="management-spin" /> : null}{label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </article>
-          );
-        })}
-      </section>
-    </>
+      <div className={`mg-orders-split ${selected ? 'has-selection' : ''}`}>
+        <div className="mg-order-list">
+          {loading && !data && <div className="mg-empty"><Loader2 size={22} className="mg-spin" /><p>Cargando pedidos…</p></div>}
+          {data && visible.length === 0 && <div className="mg-empty"><ShoppingBag size={24} /><p>{term ? 'Ningún pedido coincide con la búsqueda.' : filter === 'attention' ? 'No hay pedidos para atender. Cuando entre uno, suena un aviso.' : 'No hay pedidos en esta vista.'}</p></div>}
+          {visible.map(order => <OrderRow key={order.id} order={order} selected={order.id === selectedId} onSelect={onSelect} now={now} />)}
+        </div>
+        <div className="mg-order-detail">
+          {selected
+            ? <OrderTicket order={selected} contactAvailable={data?.contact !== false} working={working} onAction={onAction} onClose={() => onSelect('')} />
+            : <div className="mg-empty mg-detail-empty"><ShoppingBag size={26} /><p>Elegí un pedido de la lista para ver el comprador, los productos y el pago.</p></div>}
+        </div>
+      </div>
+    </div>
   );
 }

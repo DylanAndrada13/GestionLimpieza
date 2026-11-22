@@ -2,36 +2,42 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownUp,
-  ArrowRight,
   Bell,
-  Boxes,
-  CalendarDays,
+  BellOff,
+  BellRing,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleAlert,
-  Globe,
-  LayoutDashboard,
+  Home,
   Loader2,
   LogOut,
   Package,
   PackagePlus,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Settings,
+  ShoppingBag,
   ShoppingCart,
-  SlidersHorizontal,
-  Store,
-  Sun,
   Trash2,
   X,
 } from 'lucide-react';
 import { productBarcodes } from './catalog';
 import ThemePicker from './ThemePicker';
-import WebOrdersPage, { needsAttention } from './WebOrdersPage';
+import WebOrdersPage, { ORDER_LABEL, needsAttention, timeAgo } from './WebOrdersPage';
 import './management.css';
 
 const LOW_STOCK = 5;
+const PAGE_SIZE = 120;
+// Supabase free plan: the inventory is checked with a tiny query every minute and downloaded
+// again only when it changed. Online orders, one light query every 30 s (60 s with the tab hidden).
+const VERSION_CHECK_MS = 60_000;
+const FULL_RELOAD_MS = 10 * 60_000;
+const ORDERS_VISIBLE_MS = 30_000;
+const ORDERS_HIDDEN_MS = 60_000;
+
 const money = value => `$${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0))}`;
 const dateTime = value => {
   const date = new Date(value);
@@ -39,36 +45,43 @@ const dateTime = value => {
 };
 const number = value => new Intl.NumberFormat('es-AR').format(Number(value) || 0);
 const emptyProduct = () => ({ barcode: '', name: '', brand: '', category: '', quantity: '', price: '', stock: '0', image: '' });
+const isToday = value => new Date(value).toDateString() === new Date().toDateString();
 
-const SECTIONS = [
-  { id: 'home', label: 'Inicio', icon: LayoutDashboard },
-  { id: 'orders', label: 'Pedidos online', icon: Globe },
-  { id: 'products', label: 'Productos', icon: Package },
-  { id: 'movements', label: 'Movimientos', icon: ArrowDownUp },
-  { id: 'settings', label: 'Configuración', icon: Settings },
+const NAV = [
+  { group: 'Hoy', items: [
+    { id: 'home', label: 'Resumen', icon: Home },
+    { id: 'orders', label: 'Pedidos online', icon: ShoppingBag },
+  ] },
+  { group: 'Inventario', items: [
+    { id: 'products', label: 'Productos', icon: Package },
+    { id: 'movements', label: 'Movimientos', icon: ArrowDownUp },
+  ] },
 ];
+const SECTION_IDS = ['home', 'orders', 'products', 'movements', 'settings'];
+const HASH = { home: '', orders: 'pedidos', products: 'productos', movements: 'movimientos', settings: 'configuracion' };
+const sectionFromHash = () => {
+  const hash = window.location.hash.replace('#', '');
+  return SECTION_IDS.find(id => HASH[id] === hash && hash) || 'home';
+};
 
-function Logo({ small = false }) {
-  return <span className={`management-logo ${small ? 'is-small' : ''}`}><img src="/nuevologo.jpg" alt="" /><strong>CR Perfumería</strong></span>;
+function Logo() {
+  return <span className="mg-logo"><img src="/nuevologo.jpg" alt="" /><span><strong>CR Perfumería</strong><small>Gestión del local</small></span></span>;
 }
 
 function EntryPanel({ password, setPassword, onSubmit, busy, message, onSales, theme }) {
   return (
-    <main className={`management-entry ${theme === 'light' ? 'theme-light' : ''}`}>
-      <section className="management-entry-card">
+    <main className={`mg-screen ${theme === 'light' ? 'is-light' : ''}`}>
+      <section className="mg-entry">
         <Logo />
-        <span className="management-eyebrow">Modo gestión</span>
-        <h1>Administrá tu local</h1>
-        <p>Ingresá la misma clave del local para ver el inventario y sus movimientos.</p>
+        <h1>Entrá a gestión</h1>
+        <p>Usá la misma clave del local que en el modo venta.</p>
         <form onSubmit={onSubmit}>
-          <label htmlFor="management-password">Clave de acceso</label>
-          <input id="management-password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required />
-          {message && <div className="management-error"><CircleAlert size={16} />{message}</div>}
-          <button type="submit" className="management-primary" disabled={busy}>
-            {busy ? <><Loader2 size={18} className="management-spin" /> Ingresando…</> : 'Ingresar a gestión'}
-          </button>
+          <label htmlFor="mg-password">Clave del local</label>
+          <input id="mg-password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required autoFocus />
+          {message && <div className="mg-notice tone-danger"><CircleAlert size={16} />{message}</div>}
+          <button type="submit" className="mg-btn primary wide" disabled={busy}>{busy ? <><Loader2 size={17} className="mg-spin" /> Entrando…</> : 'Entrar'}</button>
         </form>
-        <button type="button" className="management-return" onClick={onSales}><ShoppingCart size={16} /> Ir al modo venta</button>
+        <button type="button" className="mg-btn ghost wide" onClick={onSales}><ShoppingCart size={16} /> Ir al modo venta</button>
       </section>
     </main>
   );
@@ -76,78 +89,104 @@ function EntryPanel({ password, setPassword, onSubmit, busy, message, onSales, t
 
 function MobileNotice({ theme }) {
   return (
-    <main className={`management-mobile ${theme === 'light' ? 'theme-light' : ''}`}>
-      <div className="management-mobile-card">
+    <main className={`mg-screen ${theme === 'light' ? 'is-light' : ''}`}>
+      <section className="mg-entry">
         <Logo />
-        <div className="management-mobile-icon"><LayoutDashboard size={30} /></div>
-        <h1>Modo gestión</h1>
-        <p>Esta sección está preparada para computadoras. En tu dispositivo móvil, iniciá la app en <strong>modo venta</strong>.</p>
-        <a href="/" className="management-primary"><ShoppingCart size={18} /> Ir al modo venta</a>
-      </div>
+        <h1>Gestión se usa en la computadora</h1>
+        <p>En el teléfono, abrí el <strong>modo venta</strong> para escanear y cobrar en el mostrador.</p>
+        <a href="/" className="mg-btn primary wide"><ShoppingCart size={17} /> Ir al modo venta</a>
+      </section>
     </main>
   );
 }
 
-function StatCard({ icon: Icon, label, value, detail, tone = 'gold' }) {
-  return (
-    <article className={`management-stat ${tone}`}>
-      <span className="management-stat-icon"><Icon size={22} /></span>
-      <span className="management-stat-copy"><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>
-    </article>
-  );
-}
-
-function Dashboard({ catalog, onSection, onEdit }) {
-  const lowStock = useMemo(() => catalog.filter(item => Number(item.stock) <= LOW_STOCK).sort((a, b) => Number(a.stock) - Number(b.stock)).slice(0, 5), [catalog]);
-  const lowCount = catalog.filter(item => Number(item.stock) <= LOW_STOCK).length;
-  const okPercent = catalog.length ? Math.round(((catalog.length - lowCount) / catalog.length) * 100) : 0;
+function Dashboard({ catalog, orders, onSection, onOpenOrder, onEdit }) {
+  const lowStock = useMemo(() => catalog.filter(item => Number(item.stock) <= LOW_STOCK).sort((a, b) => Number(a.stock) - Number(b.stock)), [catalog]);
   const units = catalog.reduce((sum, item) => sum + (Number(item.stock) || 0), 0);
+  const empty = catalog.filter(item => Number(item.stock) === 0).length;
+  const attention = orders.filter(needsAttention).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const fresh = attention.filter(order => order.order_status === 'pending_review').length;
+  const today = orders.filter(order => isToday(order.created_at) && order.order_status !== 'cancelled');
+  const paidToday = orders.filter(order => order.payment_status === 'paid' && order.paid_at && isToday(order.paid_at)).reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const cashPending = orders.filter(order => order.payment_method === 'efectivo' && order.payment_status === 'pending' && !['cancelled', 'delivered'].includes(order.order_status)).reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const hour = new Date().getHours();
 
   return (
-    <>
-      <div className="management-page-heading">
-        <div><span className="management-eyebrow">Panel del local</span><h1>Hola, bienvenido</h1><p>Resumen de tu inventario</p></div>
-        <div className="management-date"><CalendarDays size={17} />{new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</div>
+    <div className="mg-page">
+      <div className="mg-page-head">
+        <div>
+          <h1>{hour < 13 ? 'Buen día' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'}</h1>
+          <p className="mg-date">{new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p>
+        </div>
       </div>
-      <section className="management-stats">
-        <StatCard icon={Boxes} label="Productos registrados" value={number(catalog.length)} detail={`${number(units)} unidades en stock`} />
-        <StatCard icon={CheckCircle2} label="Stock en orden" value={`${okPercent}%`} detail={`${number(catalog.length - lowCount)} productos con más de ${LOW_STOCK} unidades`} tone="green" />
-        <StatCard icon={AlertTriangle} label="Stock bajo" value={number(lowCount)} detail={lowCount ? 'Necesitan reposición' : 'No hay alertas'} tone={lowCount ? 'warning' : 'green'} />
+
+      <section className={`mg-hero-orders ${fresh ? 'has-new' : ''}`} aria-labelledby="mg-attend-title">
+        <div className="mg-hero-orders-count">
+          <strong>{attention.length}</strong>
+          <span id="mg-attend-title">{attention.length === 1 ? 'pedido online para atender' : 'pedidos online para atender'}</span>
+          {fresh > 0 && <em><BellRing size={15} /> {fresh === 1 ? '1 nuevo sin aceptar' : `${fresh} nuevos sin aceptar`}</em>}
+        </div>
+        <ul className="mg-hero-orders-list">
+          {attention.slice(0, 4).map(order => (
+            <li key={order.id}>
+              <button type="button" onClick={() => onOpenOrder(order.id)}>
+                <span className={`mg-dot tone-${order.order_status === 'pending_review' || order.order_status === 'confirmed' ? 'new' : order.order_status === 'ready_for_pickup' ? 'ready' : 'work'}`} />
+                <span className="mg-hero-order-copy"><strong>{order.customer_name}</strong><small>{ORDER_LABEL[order.order_status]} · {order.pickup_point} · {timeAgo(order.created_at)}</small></span>
+                <b>{money(order.total_amount)}</b>
+                <ChevronRight size={16} />
+              </button>
+            </li>
+          ))}
+          {!attention.length && <li className="mg-hero-orders-empty">Todo atendido. Cuando entre un pedido, suena un aviso y aparece acá.</li>}
+        </ul>
+        <button type="button" className="mg-btn ghost" onClick={() => onSection('orders')}>Ver todos los pedidos</button>
       </section>
-      <section className="management-dashboard-grid">
-        <article className="management-panel low-stock-panel">
-          <header className="management-panel-heading"><div><span className="management-eyebrow">Atención</span><h2>Stock más bajo</h2></div><button type="button" className="management-link" onClick={() => onSection('products')}>Ver productos <ArrowRight size={16} /></button></header>
-          {lowStock.length ? (
-            <div className="management-low-list">
-              {lowStock.map(item => (
-                <button type="button" className="management-low-row" key={item.barcode} onClick={() => onEdit(item)}>
-                  <span className="management-product-thumb"><Package size={19} /></span>
-                  <span className="management-low-copy"><strong>{item.name}</strong><small>{item.brand || item.barcode}</small></span>
-                  <span className={`management-stock-count ${Number(item.stock) === 0 ? 'is-empty' : ''}`}>{number(item.stock)} <small>u.</small></span>
-                  <ChevronRight size={17} className="management-muted-icon" />
+
+      <section className="mg-figures" aria-label="Números de hoy">
+        <div><span>Pedidos online hoy</span><strong>{number(today.length)}</strong></div>
+        <div><span>Cobrado online hoy</span><strong>{money(paidToday)}</strong></div>
+        <div><span>A cobrar en efectivo</span><strong>{money(cashPending)}</strong></div>
+        <div><span>Productos en inventario</span><strong>{number(catalog.length)}</strong><small>{number(units)} unidades · {number(empty)} sin stock</small></div>
+      </section>
+
+      <section className="mg-panel">
+        <header className="mg-panel-head">
+          <h2>Stock bajo</h2>
+          <span className="mg-muted">{lowStock.length ? `${number(lowStock.length)} productos con ${LOW_STOCK} unidades o menos` : 'Sin alertas'}</span>
+          <button type="button" className="mg-link" onClick={() => onSection('products', 'low')}>Ver en productos <ChevronRight size={15} /></button>
+        </header>
+        {lowStock.length ? (
+          <ul className="mg-low-list">
+            {lowStock.slice(0, 8).map(item => (
+              <li key={item.barcode}>
+                <button type="button" onClick={() => onEdit(item)}>
+                  <span className="mg-thumb">{item.image ? <img src={item.image} alt="" loading="lazy" /> : <Package size={17} />}</span>
+                  <span className="mg-low-copy"><strong>{item.name}</strong><small>{item.brand || item.barcode}</small></span>
+                  <span className={`mg-stock ${Number(item.stock) === 0 ? 'is-empty' : 'is-low'}`}>{Number(item.stock) === 0 ? 'Sin stock' : `${number(item.stock)} u.`}</span>
+                  <Pencil size={15} className="mg-muted" />
                 </button>
-              ))}
-            </div>
-          ) : <div className="management-inventory-ok"><span><CheckCircle2 size={32} /></span><strong>Todo tu inventario al día</strong><small>Los productos tienen stock suficiente.</small></div>}
-        </article>
-        <article className="management-panel management-side-card">
-          <div className="management-side-icon"><Store size={31} /></div>
-          <span className="management-eyebrow">Tu negocio</span>
-          <h2>Inventario al día</h2>
-          <p>Los cambios se guardan y se reflejan también en el modo venta.</p>
-          <button type="button" className="management-secondary" onClick={() => onSection('products')}><Package size={17} /> Gestionar productos</button>
-        </article>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mg-empty-inline"><CheckCircle2 size={18} /> Todos los productos tienen más de {LOW_STOCK} unidades.</p>}
       </section>
-    </>
+    </div>
   );
 }
 
-function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
+function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode, initialFilter }) {
   const [term, setTerm] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(initialFilter || 'all');
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  useEffect(() => { setFilter(initialFilter || 'all'); }, [initialFilter]);
+  useEffect(() => { setLimit(PAGE_SIZE); }, [term, filter]);
+  const counts = useMemo(() => ({
+    low: catalog.filter(item => { const s = Number(item.stock) || 0; return s > 0 && s <= LOW_STOCK; }).length,
+    empty: catalog.filter(item => (Number(item.stock) || 0) === 0).length,
+  }), [catalog]);
   const filtered = useMemo(() => {
     const query = term.trim().toLocaleLowerCase('es');
-    return [...catalog].filter(item => {
+    return catalog.filter(item => {
       const matchesText = !query || [item.name, item.brand, item.category, ...productBarcodes(item)].some(value => String(value || '').toLocaleLowerCase('es').includes(query));
       const stock = Number(item.stock) || 0;
       const matchesStock = filter === 'all' || (filter === 'low' ? stock > 0 && stock <= LOW_STOCK : stock === 0);
@@ -156,109 +195,123 @@ function ProductsPage({ catalog, onEdit, onAdd, onDelete, deletingBarcode }) {
   }, [catalog, filter, term]);
 
   return (
-    <>
-      <div className="management-page-heading products-heading">
-        <div><span className="management-eyebrow">Inventario del local</span><h1>Productos</h1><p>Consultá y actualizá precios y stock.</p></div>
-        <button type="button" className="management-primary add-product-button" onClick={onAdd}><Plus size={18} /> Nuevo producto</button>
+    <div className="mg-page">
+      <div className="mg-page-head">
+        <div><h1>Productos</h1><p>Precios y stock del local. Lo que cambies acá se ve en el modo venta y en la tienda online.</p></div>
+        <div className="mg-page-actions"><button type="button" className="mg-btn primary" onClick={onAdd}><Plus size={17} /> Nuevo producto</button></div>
       </div>
-      <section className="management-panel management-products-panel">
-        <div className="management-products-toolbar">
-          <label className="management-search"><Search size={18} /><input value={term} onChange={event => setTerm(event.target.value)} placeholder="Buscar por nombre, marca o código de barras" /></label>
-          <div className="management-filters" aria-label="Filtrar productos">
-            <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Todos</button>
-            <button type="button" className={filter === 'low' ? 'active' : ''} onClick={() => setFilter('low')}>Stock bajo</button>
-            <button type="button" className={filter === 'empty' ? 'active' : ''} onClick={() => setFilter('empty')}>Sin stock</button>
-          </div>
+      <div className="mg-toolbar">
+        <div className="mg-tabs" role="tablist" aria-label="Filtrar por stock">
+          {[['all', 'Todos', null], ['low', 'Stock bajo', counts.low], ['empty', 'Sin stock', counts.empty]].map(([id, label, count]) => (
+            <button key={id} type="button" role="tab" aria-selected={filter === id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}{count ? <b>{count}</b> : null}</button>
+          ))}
         </div>
-        <div className="management-table-wrap">
-          <table className="management-table">
-            <thead><tr><th>Producto</th><th>Código de barras</th><th>Precio</th><th>Stock</th><th>Estado</th><th aria-label="Acciones" /></tr></thead>
+        <label className="mg-search"><Search size={16} /><input value={term} onChange={event => setTerm(event.target.value)} placeholder="Buscar por nombre, marca o código de barras" aria-label="Buscar productos" /></label>
+      </div>
+      <section className="mg-panel mg-table-panel">
+        <div className="mg-table-wrap">
+          <table className="mg-table">
+            <thead><tr><th scope="col">Producto</th><th scope="col">Código</th><th scope="col" className="mg-num">Precio</th><th scope="col" className="mg-num">Stock</th><th scope="col"><span className="mg-sr">Acciones</span></th></tr></thead>
             <tbody>
-              {filtered.map(item => {
+              {filtered.slice(0, limit).map(item => {
                 const stock = Number(item.stock) || 0;
                 return (
                   <tr key={item.barcode}>
-                    <td><span className="management-table-product"><span className="management-product-thumb">{item.image ? <img src={item.image} alt="" /> : <Package size={18} />}</span><span><strong>{item.name}</strong><small>{[item.brand, item.quantity].filter(Boolean).join(' · ') || item.category || 'Sin detalle'}</small></span></span></td>
-                    <td className="management-code">{item.barcode}</td>
-                    <td className="management-price">{money(item.price)}</td>
-                    <td>{number(stock)} u.</td>
-                    <td><span className={`management-status ${stock === 0 ? 'empty' : stock <= LOW_STOCK ? 'low' : 'ok'}`}><i />{stock === 0 ? 'Sin stock' : stock <= LOW_STOCK ? 'Stock bajo' : 'En orden'}</span></td>
-                    <td><div className="management-row-actions"><button type="button" className="management-icon-button" onClick={() => onEdit(item)} aria-label={`Editar ${item.name}`}><Pencil size={16} /></button><button type="button" className="management-icon-button delete" onClick={() => onDelete(item)} disabled={Boolean(deletingBarcode)} aria-label={`Eliminar ${item.name}`}>{deletingBarcode === item.barcode ? <Loader2 size={16} className="management-spin" /> : <Trash2 size={16} />}</button></div></td>
+                    <td><span className="mg-table-product"><span className="mg-thumb">{item.image ? <img src={item.image} alt="" loading="lazy" /> : <Package size={17} />}</span><span><strong>{item.name}</strong><small>{[item.brand, item.quantity, item.category].filter(Boolean).join(' · ') || 'Sin detalle'}</small></span></span></td>
+                    <td className="mg-code">{item.barcode}</td>
+                    <td className="mg-num mg-price">{money(item.price)}</td>
+                    <td className="mg-num"><span className={`mg-stock ${stock === 0 ? 'is-empty' : stock <= LOW_STOCK ? 'is-low' : ''}`}>{stock === 0 ? 'Sin stock' : `${number(stock)} u.`}</span></td>
+                    <td><div className="mg-row-actions"><button type="button" className="mg-icon-btn" onClick={() => onEdit(item)} aria-label={`Editar ${item.name}`}><Pencil size={16} /></button><button type="button" className="mg-icon-btn danger" onClick={() => onDelete(item)} disabled={Boolean(deletingBarcode)} aria-label={`Eliminar ${item.name}`}>{deletingBarcode === item.barcode ? <Loader2 size={16} className="mg-spin" /> : <Trash2 size={16} />}</button></div></td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan="6"><div className="management-empty"><Search size={24} /><strong>No encontramos productos</strong><span>Probá otra búsqueda o agregá uno nuevo.</span></div></td></tr>}
+              {filtered.length === 0 && <tr><td colSpan="5"><div className="mg-empty"><Search size={22} /><p>No hay productos con esa búsqueda. Probá con otra palabra o agregá uno nuevo.</p></div></td></tr>}
             </tbody>
           </table>
         </div>
-        <footer className="management-table-footer">{number(filtered.length)} de {number(catalog.length)} productos</footer>
+        <footer className="mg-table-foot">
+          <span>{number(Math.min(limit, filtered.length))} de {number(filtered.length)} productos{filtered.length !== catalog.length ? ` (total ${number(catalog.length)})` : ''}</span>
+          {filtered.length > limit && <button type="button" className="mg-btn ghost" onClick={() => setLimit(value => value + PAGE_SIZE)}>Mostrar {number(Math.min(PAGE_SIZE, filtered.length - limit))} más</button>}
+        </footer>
       </section>
-    </>
+    </div>
   );
 }
 
-function MovementsPage({ movements, loading, stockTrackingAvailable }) {
+function MovementsPage({ movements, loading, stockTrackingAvailable, onRefresh }) {
   const [openId, setOpenId] = useState('');
   return (
-    <>
-      <div className="management-page-heading"><div><span className="management-eyebrow">Actividad del local</span><h1>Movimientos</h1><p>Ingresos de stock y compras finalizadas.</p></div></div>
-      <section className="management-panel management-movements-panel">
-        <header className="management-panel-heading"><div><span className="management-eyebrow">Historial</span><h2>Actividad reciente</h2></div><span className="management-count-pill">{number(movements.length)} registros</span></header>
-        {stockTrackingAvailable === false && <div className="management-movement-setup">El historial de ingresos de stock todavía no está activo. Contactá al soporte para habilitarlo.</div>}
-        {loading ? <div className="management-loading-inline"><Loader2 size={19} className="management-spin" /> Cargando movimientos…</div> : movements.length ? (
-          <div className="management-movement-list">
+    <div className="mg-page">
+      <div className="mg-page-head">
+        <div><h1>Movimientos</h1><p>Ventas del mostrador e ingresos de stock, del más reciente al más viejo.</p></div>
+        <div className="mg-page-actions"><button type="button" className="mg-btn ghost" onClick={onRefresh} disabled={loading}>{loading ? <Loader2 size={16} className="mg-spin" /> : <RefreshCw size={16} />} Actualizar</button></div>
+      </div>
+      {stockTrackingAvailable === false && <div className="mg-notice"><AlertTriangle size={17} />El historial de ingresos de stock todavía no está activo en la base de datos.</div>}
+      <section className="mg-panel">
+        {loading && !movements.length ? <div className="mg-empty"><Loader2 size={20} className="mg-spin" /><p>Cargando movimientos…</p></div> : movements.length ? (
+          <ul className="mg-moves">
             {movements.map(movement => {
               const open = openId === movement.id;
               const isPurchase = movement.kind === 'purchase';
               const units = isPurchase ? movement.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0) : movement.quantityAdded;
               return (
-                <article className={`management-movement ${open ? 'is-open' : ''}`} key={movement.id}>
-                  <button type="button" className="management-movement-summary" onClick={() => setOpenId(open ? '' : movement.id)} aria-expanded={open}>
-                    <span className={`management-movement-icon ${isPurchase ? '' : 'stock'}`}>{isPurchase ? <ShoppingCart size={18} /> : <PackagePlus size={18} />}</span>
-                    <span className="management-movement-copy"><strong>{isPurchase ? `Compra · ${money(movement.total)}` : `Stock ingresado · ${movement.name}`}</strong><small>{dateTime(movement.at)} · {isPurchase ? `${number(units)} unidades` : `+${number(units)} unidades · stock actual ${number(movement.newStock)}`}</small></span>
-                    <span className="management-movement-total">{isPurchase ? money(movement.total) : `+${number(units)} u.`}</span>
-                    <ChevronRight size={18} className="management-movement-chevron" />
+                <li key={movement.id} className={open ? 'is-open' : ''}>
+                  <button type="button" className="mg-move" onClick={() => setOpenId(open ? '' : movement.id)} aria-expanded={open}>
+                    <span className={`mg-move-icon ${isPurchase ? 'is-sale' : 'is-stock'}`}>{isPurchase ? <ShoppingCart size={16} /> : <PackagePlus size={16} />}</span>
+                    <span className="mg-move-copy"><strong>{isPurchase ? 'Venta en el mostrador' : `Ingreso de stock: ${movement.name}`}</strong><small>{dateTime(movement.at)} · {isPurchase ? `${number(units)} unidades` : `stock ${number(movement.previousStock)} → ${number(movement.newStock)}`}</small></span>
+                    <span className="mg-move-total">{isPurchase ? money(movement.total) : `+${number(units)} u.`}</span>
+                    <ChevronDown size={17} className="mg-move-chevron" />
                   </button>
-                  {open && (isPurchase
-                    ? <div className="management-movement-detail">{movement.items.map((item, index) => <div className="management-movement-line" key={`${item.barcode}-${index}`}><span>{item.name} <small>×{item.qty}</small></span><strong>{money(Number(item.price) * Number(item.qty))}</strong></div>)}</div>
-                    : <div className="management-movement-detail"><div className="management-movement-line"><span>{movement.name} <small>Código {movement.barcode}</small></span><strong>Stock {number(movement.previousStock)} → {number(movement.newStock)}</strong></div></div>)}
-                </article>
+                  {open && (
+                    <div className="mg-move-detail">
+                      {isPurchase
+                        ? movement.items.map((item, index) => <div key={`${item.barcode}-${index}`}><span>{item.qty} × {item.name}</span><strong>{money(Number(item.price) * Number(item.qty))}</strong></div>)
+                        : <div><span>{movement.name} · código {movement.barcode}</span><strong>+{number(units)} u.</strong></div>}
+                    </div>
+                  )}
+                </li>
               );
             })}
-          </div>
-        ) : <div className="management-empty"><ArrowDownUp size={24} /><strong>Todavía no hay movimientos</strong><span>Los ingresos de stock y las compras finalizadas aparecerán acá.</span></div>}
+          </ul>
+        ) : <div className="mg-empty"><ArrowDownUp size={22} /><p>Todavía no hay movimientos. Las ventas del mostrador y los ingresos de stock aparecen acá.</p></div>}
       </section>
-    </>
+    </div>
   );
 }
 
-function SettingsPage({ onSales, onLogout, theme, onThemeChange }) {
+function SettingsPage({ onSales, onLogout, theme, onThemeChange, notificationsEnabled, onEnableNotifications, lastSync, onRefresh, syncing }) {
   return (
-    <>
-      <div className="management-page-heading"><div><span className="management-eyebrow">Preferencias</span><h1>Configuración</h1><p>Acceso y preferencias de CR Perfumería.</p></div></div>
-      <section className="management-settings-grid">
-        <article className="management-panel management-settings-card">
-          <span className="management-settings-icon"><Sun size={21} /></span><span className="management-eyebrow">Apariencia</span>
-          <h2>Modo claro u oscuro</h2><p>Elegí el aspecto visual para los modos venta y gestión.</p>
+    <div className="mg-page">
+      <div className="mg-page-head"><div><h1>Configuración</h1><p>Preferencias de este dispositivo y de la sesión.</p></div></div>
+      <section className="mg-settings">
+        <article className="mg-panel mg-setting">
+          <h2>Apariencia</h2>
+          <p>Claro u oscuro, para el modo venta y gestión en esta computadora.</p>
           <ThemePicker theme={theme} onChange={onThemeChange} />
         </article>
-        <article className="management-panel management-settings-card">
-          <span className="management-settings-icon"><Store size={21} /></span><span className="management-eyebrow">Datos del local</span>
-          <h2>Datos del local</h2><p>El inventario, los precios y los movimientos se comparten con el modo venta.</p>
-          <span className="management-connection"><i /> Datos al día</span>
+        <article className="mg-panel mg-setting">
+          <h2>Avisos de pedidos</h2>
+          <p>Con los avisos activados, la computadora muestra una notificación cuando entra un pedido online, aunque estés en otra pestaña.</p>
+          {notificationsEnabled === null ? <span className="mg-muted">Este navegador no permite avisos.</span>
+            : notificationsEnabled ? <span className="mg-state is-ok"><Bell size={16} /> Avisos activados</span>
+              : <button type="button" className="mg-btn ghost" onClick={onEnableNotifications}><BellOff size={16} /> Activar avisos</button>}
         </article>
-        <article className="management-panel management-settings-card">
-          <span className="management-settings-icon"><SlidersHorizontal size={21} /></span><span className="management-eyebrow">Modos de uso</span>
-          <h2>Elegí dónde continuar</h2><p>El modo venta está pensado para el mostrador. Gestión está preparado para trabajar desde una computadora.</p>
-          <button type="button" className="management-secondary" onClick={onSales}><ShoppingCart size={17} /> Volver al modo venta</button>
+        <article className="mg-panel mg-setting">
+          <h2>Datos del local</h2>
+          <p>El inventario se revisa cada minuto con una consulta liviana y se descarga solo si cambió algo, para cuidar el plan gratis de Supabase.</p>
+          <span className="mg-muted">{lastSync ? `Inventario actualizado ${timeAgo(lastSync)}` : 'Sin actualizar todavía'}</span>
+          <button type="button" className="mg-btn ghost" onClick={onRefresh} disabled={syncing}>{syncing ? <Loader2 size={16} className="mg-spin" /> : <RefreshCw size={16} />} Actualizar ahora</button>
         </article>
-        <article className="management-panel management-settings-card danger-settings-card">
-          <span className="management-settings-icon"><LogOut size={21} /></span><span className="management-eyebrow">Sesión</span>
-          <h2>Cerrar sesión</h2><p>Vas a volver a la pantalla para elegir entre modo venta y modo gestión. La clave es la misma en ambos.</p>
-          <button type="button" className="management-logout-button" onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
+        <article className="mg-panel mg-setting">
+          <h2>Sesión</h2>
+          <p>Cerrar sesión te devuelve a la pantalla de inicio. La clave es la misma para venta y gestión.</p>
+          <div className="mg-setting-actions">
+            <button type="button" className="mg-btn ghost" onClick={onSales}><ShoppingCart size={16} /> Ir al modo venta</button>
+            <button type="button" className="mg-btn danger-ghost" onClick={onLogout}><LogOut size={16} /> Cerrar sesión</button>
+          </div>
         </article>
       </section>
-    </>
+    </div>
   );
 }
 
@@ -267,72 +320,80 @@ function ProductEditor({ product, busy, error, onClose, onSave, setError }) {
     barcode: product.barcode || '', name: product.name || '', brand: product.brand || '', category: product.category || '', quantity: product.quantity || '', price: String(product.price ?? 0), stock: String(product.stock ?? 0), image: product.image || '',
   } : emptyProduct());
   const set = (field, value) => setForm(current => ({ ...current, [field]: value }));
-  const submit = event => {
-    event.preventDefault();
-    setError('');
-    onSave(form);
-  };
+  useEffect(() => {
+    const onKey = event => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const submit = event => { event.preventDefault(); setError(''); onSave(form); };
 
   return (
-    <div className="management-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="management-editor" role="dialog" aria-modal="true" aria-labelledby="management-editor-title">
-        <header><div><span className="management-eyebrow">Inventario</span><h2 id="management-editor-title">{product ? 'Editar producto' : 'Nuevo producto'}</h2></div><button type="button" className="management-icon-button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button></header>
+    <div className="mg-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="mg-dialog" role="dialog" aria-modal="true" aria-labelledby="mg-editor-title">
+        <header><h2 id="mg-editor-title">{product ? 'Editar producto' : 'Nuevo producto'}</h2><button type="button" className="mg-icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></header>
         <form onSubmit={submit}>
-          <div className="management-form-grid">
-            <label className="management-field full"><span>Código de barras</span><input value={form.barcode} onChange={event => set('barcode', event.target.value.replace(/\D/g, ''))} inputMode="numeric" minLength="8" maxLength="14" pattern="[0-9]{8,14}" required disabled={Boolean(product)} /></label>
-            <label className="management-field full"><span>Nombre</span><input value={form.name} onChange={event => set('name', event.target.value)} maxLength="180" required /></label>
-            <label className="management-field"><span>Marca</span><input value={form.brand} onChange={event => set('brand', event.target.value)} maxLength="100" /></label>
-            <label className="management-field"><span>Categoría</span><input value={form.category} onChange={event => set('category', event.target.value)} maxLength="100" /></label>
-            <label className="management-field"><span>Contenido</span><input value={form.quantity} onChange={event => set('quantity', event.target.value)} maxLength="80" placeholder="Ej. 500 ml" /></label>
-            <label className="management-field"><span>Precio</span><input type="number" min="0" step="0.01" value={form.price} onChange={event => set('price', event.target.value)} required /></label>
-            <label className="management-field"><span>Stock</span><input type="number" min="0" step="1" value={form.stock} onChange={event => set('stock', event.target.value)} required /></label>
-            <label className="management-field full"><span>Imagen (opcional)</span><input type="url" value={form.image} onChange={event => set('image', event.target.value)} placeholder="https://…" /></label>
+          <div className="mg-form-grid">
+            <label className="mg-field full"><span>Código de barras</span><input value={form.barcode} onChange={event => set('barcode', event.target.value.replace(/\D/g, ''))} inputMode="numeric" minLength="8" maxLength="14" pattern="[0-9]{8,14}" required disabled={Boolean(product)} autoFocus={!product} /></label>
+            <label className="mg-field full"><span>Nombre</span><input value={form.name} onChange={event => set('name', event.target.value)} maxLength="180" required autoFocus={Boolean(product)} /></label>
+            <label className="mg-field"><span>Marca</span><input value={form.brand} onChange={event => set('brand', event.target.value)} maxLength="100" /></label>
+            <label className="mg-field"><span>Categoría</span><input value={form.category} onChange={event => set('category', event.target.value)} maxLength="100" /></label>
+            <label className="mg-field"><span>Contenido</span><input value={form.quantity} onChange={event => set('quantity', event.target.value)} maxLength="80" placeholder="Ej. 500 ml" /></label>
+            <label className="mg-field"><span>Precio</span><input type="number" min="0" step="0.01" value={form.price} onChange={event => set('price', event.target.value)} required /></label>
+            <label className="mg-field"><span>Stock</span><input type="number" min="0" step="1" value={form.stock} onChange={event => set('stock', event.target.value)} required /></label>
+            <label className="mg-field full"><span>Imagen (opcional)</span><input type="url" value={form.image} onChange={event => set('image', event.target.value)} placeholder="https://…" /></label>
           </div>
-          {error && <div className="management-error"><CircleAlert size={16} />{error}</div>}
-          <footer><button type="button" className="management-cancel" onClick={onClose}>Cancelar</button><button type="submit" className="management-primary" disabled={busy}>{busy ? <><Loader2 size={17} className="management-spin" /> Guardando…</> : 'Guardar producto'}</button></footer>
+          {error && <div className="mg-notice tone-danger"><CircleAlert size={16} />{error}</div>}
+          <footer><button type="button" className="mg-btn ghost" onClick={onClose}>Cancelar</button><button type="submit" className="mg-btn primary" disabled={busy}>{busy ? <><Loader2 size={16} className="mg-spin" /> Guardando…</> : 'Guardar producto'}</button></footer>
         </form>
       </section>
     </div>
   );
 }
 
-function ManagementShell({ catalog, section, setSection, movements, loadingMovements, stockTrackingAvailable, onAdd, onEdit, onDelete, deletingBarcode, onSales, onLogout, theme, onThemeChange, webOrders }) {
-  const attentionCount = (webOrders.data?.orders || []).filter(needsAttention).length;
-  const newCount = (webOrders.data?.orders || []).filter(order => order.order_status === 'pending_review').length;
-  const active = SECTIONS.find(item => item.id === section) || SECTIONS[0];
-  const ActiveIcon = active.icon;
+function ManagementShell({ section, onSection, theme, onSales, onLogout, webOrders, lastSync, syncing, onRefreshAll, children }) {
+  const orders = webOrders.data?.orders || [];
+  const attentionCount = orders.filter(needsAttention).length;
+  const newCount = orders.filter(order => order.order_status === 'pending_review').length;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
+
   return (
-    <div className={`management-app ${theme === 'light' ? 'theme-light' : ''}`}>
-      <aside className="management-sidebar">
-        <a href="/gestion" className="management-brand-link" onClick={event => { event.preventDefault(); setSection('home'); }}><Logo /></a>
-        <div className="management-sidebar-label">LOCAL</div>
-        <nav className="management-sidebar-nav" aria-label="Secciones de gestión">
-          {SECTIONS.map(item => {
-            const Icon = item.icon;
-            const selected = section === item.id;
-            const badge = item.id === 'orders' && attentionCount > 0 ? <b className={`management-nav-badge ${newCount ? 'is-new' : ''}`}>{attentionCount}</b> : null;
-            return <button type="button" key={item.id} className={`management-nav-item ${selected ? 'active' : ''}`} onClick={() => setSection(item.id)} aria-current={selected ? 'page' : undefined}><Icon size={19} /><span>{item.label}</span>{badge}{selected && !badge && <i />}</button>;
-          })}
+    <div className={`mg-app ${theme === 'light' ? 'is-light' : ''}`}>
+      <aside className="mg-sidebar">
+        <a href="/gestion" className="mg-brand" onClick={event => { event.preventDefault(); onSection('home'); }}><Logo /></a>
+        <nav aria-label="Secciones de gestión">
+          {NAV.map(group => (
+            <div className="mg-nav-group" key={group.group}>
+              <span className="mg-nav-title">{group.group}</span>
+              {group.items.map(item => {
+                const Icon = item.icon;
+                const selected = section === item.id;
+                return (
+                  <button type="button" key={item.id} className={`mg-nav-item ${selected ? 'is-active' : ''}`} onClick={() => onSection(item.id)} aria-current={selected ? 'page' : undefined}>
+                    <Icon size={18} /><span>{item.label}</span>
+                    {item.id === 'orders' && attentionCount > 0 && <b className={`mg-badge ${newCount ? 'is-new' : ''}`} aria-label={`${attentionCount} para atender`}>{attentionCount}</b>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
-        <div className="management-sidebar-bottom">
-          <button type="button" className="management-mode-switch" onClick={onSales}><ShoppingCart size={18} /><span><strong>Modo venta</strong><small>Volver al mostrador</small></span><ArrowRight size={16} /></button>
-          <button type="button" className="management-sidebar-logout" onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
-          <div className="management-sidebar-foot"><span className="management-user-avatar">CR</span><span><strong>CR Perfumería</strong><small>Acceso compartido</small></span></div>
+        <div className="mg-sidebar-foot">
+          <button type="button" className={`mg-nav-item ${section === 'settings' ? 'is-active' : ''}`} onClick={() => onSection('settings')} aria-current={section === 'settings' ? 'page' : undefined}><Settings size={18} /><span>Configuración</span></button>
+          <button type="button" className="mg-nav-item" onClick={onSales}><ShoppingCart size={18} /><span>Modo venta</span></button>
+          <button type="button" className="mg-nav-item is-quiet" onClick={onLogout}><LogOut size={18} /><span>Cerrar sesión</span></button>
         </div>
       </aside>
 
-      <main className="management-workspace">
-        <header className="management-topbar">
-          <div className="management-crumb"><ActiveIcon size={17} /><span>Gestión</span><ChevronRight size={15} /><strong>{active.label}</strong></div>
-          <div className="management-topbar-right">{newCount > 0 && <button type="button" className="management-topbar-orders" onClick={() => setSection('orders')}><Bell size={15} /> {newCount === 1 ? '1 pedido nuevo' : `${newCount} pedidos nuevos`}</button>}<span className="management-status-dot" /> <span>Datos al día</span><span className="management-topbar-divider" /><span className="management-topbar-avatar">CR</span></div>
+      <main className="mg-workspace">
+        <header className="mg-topbar">
+          <button type="button" className="mg-sync" onClick={onRefreshAll} disabled={syncing} title="Actualizar inventario y pedidos">
+            {syncing ? <Loader2 size={14} className="mg-spin" /> : <RefreshCw size={14} />}
+            <span>{lastSync ? `Inventario al día · revisado ${timeAgo(lastSync, now)}` : 'Conectando…'}</span>
+          </button>
+          {newCount > 0 && section !== 'orders' && <button type="button" className="mg-new-orders" onClick={() => onSection('orders')}><BellRing size={15} /> {newCount === 1 ? '1 pedido nuevo' : `${newCount} pedidos nuevos`}</button>}
         </header>
-        <div className="management-content">
-          {section === 'orders' && <WebOrdersPage data={webOrders.data} loading={webOrders.loading} error={webOrders.error} onRefresh={webOrders.refresh} onAction={webOrders.act} working={webOrders.working} notificationsEnabled={webOrders.notificationsEnabled} onEnableNotifications={webOrders.enableNotifications} />}
-          {section === 'home' && <Dashboard catalog={catalog} onSection={setSection} onEdit={onEdit} />}
-          {section === 'products' && <ProductsPage catalog={catalog} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} deletingBarcode={deletingBarcode} />}
-          {section === 'movements' && <MovementsPage movements={movements} loading={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} />}
-          {section === 'settings' && <SettingsPage onSales={onSales} onLogout={onLogout} theme={theme} onThemeChange={onThemeChange} />}
-        </div>
+        <div className="mg-content">{children}</div>
       </main>
     </div>
   );
@@ -343,9 +404,11 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
   const [status, setStatus] = useState(mobile ? 'mobile' : 'loading');
   const [catalog, setCatalog] = useState([]);
   const [movements, setMovements] = useState([]);
-  const [loadingMovements, setLoadingMovements] = useState(true);
+  const [loadingMovements, setLoadingMovements] = useState(false);
   const [stockTrackingAvailable, setStockTrackingAvailable] = useState(null);
-  const [section, setSection] = useState('home');
+  const [section, setSectionState] = useState(sectionFromHash);
+  const [productFilter, setProductFilter] = useState('all');
+  const [selectedOrderId, setSelectedOrderId] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -354,18 +417,41 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
   const [savingProduct, setSavingProduct] = useState(false);
   const [deletingBarcode, setDeletingBarcode] = useState('');
   const [editorError, setEditorError] = useState('');
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState(null);
+  const [lastSync, setLastSync] = useState(0);
+  const [syncing, setSyncing] = useState(false);
   const [webData, setWebData] = useState(null);
   const [webLoading, setWebLoading] = useState(false);
   const [webError, setWebError] = useState('');
   const [webWorking, setWebWorking] = useState('');
+  const [webLoaded, setWebLoaded] = useState(0);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => (typeof Notification === 'undefined' ? null : Notification.permission === 'granted'));
   const knownPending = useRef(null);
+  const versionRef = useRef('');
+  const lastFullRef = useRef(0);
+  const movementsAtRef = useRef(0);
+  const toastTimer = useRef(0);
+
+  const showToast = useCallback((text, tone = 'ok', ms = 3400) => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ text, tone });
+    toastTimer.current = window.setTimeout(() => setToast(null), ms);
+  }, []);
+
+  const setSection = useCallback((next, filter) => {
+    setSectionState(next);
+    if (next === 'products') setProductFilter(filter || 'all');
+    const hash = HASH[next] ? `#${HASH[next]}` : '';
+    if (window.location.hash !== hash) window.history.replaceState({}, '', `/gestion${hash}`);
+  }, []);
+  const openOrder = useCallback(id => { setSelectedOrderId(id); setSection('orders'); }, [setSection]);
 
   const applyState = useCallback(data => {
     setCatalog(data.catalog || []);
     setStatus('ready');
     setMessage('');
+    lastFullRef.current = Date.now();
+    setLastSync(Date.now());
   }, []);
 
   const request = useCallback(async (path, options = {}) => {
@@ -397,74 +483,94 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     return () => { active = false; };
   }, [applyState, mobile, request]);
 
+  const loadMovements = useCallback(async () => {
+    setLoadingMovements(true);
+    try {
+      const activity = await request('/api/shop/movements');
+      setMovements(activity.movements || []);
+      setStockTrackingAvailable(activity.stockTrackingAvailable);
+      movementsAtRef.current = Date.now();
+    } catch { }
+    finally { setLoadingMovements(false); }
+  }, [request]);
+
+  // Inventory: tiny version check; the full catalog is downloaded only when something changed.
+  const syncInventory = useCallback(async ({ force = false } = {}) => {
+    if (document.visibilityState !== 'visible' && !force) return;
+    let changed = force || Date.now() - lastFullRef.current > FULL_RELOAD_MS;
+    try {
+      const { version } = await request('/api/shop/state?version=1');
+      if (versionRef.current && version !== versionRef.current) changed = true;
+      versionRef.current = version;
+    } catch (error) { if (error.status === 401) return; changed = true; }
+    if (changed) {
+      setSyncing(true);
+      try {
+        const state = await request('/api/shop/state');
+        setCatalog(state.catalog || []);
+        lastFullRef.current = Date.now();
+        if (movementsAtRef.current) void loadMovements();
+      } catch { }
+      finally { setSyncing(false); }
+    }
+    setLastSync(Date.now());
+  }, [loadMovements, request]);
+
   useEffect(() => {
     if (status !== 'ready') return undefined;
-    const timer = window.setInterval(async () => {
-      try { await request('/api/shop/session'); } catch { }
-    }, 30_000);
-    const checkVisible = () => { if (document.visibilityState === 'visible') void request('/api/shop/session').catch(() => {}); };
-    document.addEventListener('visibilitychange', checkVisible);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', checkVisible); };
-  }, [request, status]);
-
-  useEffect(() => {
-    let active = true;
-    let pending = false;
-    const refresh = async () => {
-      if (!active || status !== 'ready' || document.visibilityState !== 'visible' || pending) return;
-      pending = true;
-      try {
-        const [state, activity] = await Promise.all([request('/api/shop/state'), request('/api/shop/movements')]);
-        if (active) {
-          setCatalog(state.catalog || []);
-          setMovements(activity.movements || []);
-          setStockTrackingAvailable(activity.stockTrackingAvailable);
-          setLoadingMovements(false);
-        }
-      } catch { }
-      finally { pending = false; }
-    };
-    void refresh();
-    const timer = window.setInterval(refresh, 15_000);
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    void syncInventory();
+    const timer = window.setInterval(() => void syncInventory(), VERSION_CHECK_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') void syncInventory(); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [request, status]);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [status, syncInventory]);
 
-  // Online orders: one small query every 30 s while gestión is open and visible.
-  // A new cash order (or a newly paid one) shows a toast, a short sound, a browser notification and a counter in the tab title.
+  // Movements only load when that section is opened (and again when the inventory changes).
+  useEffect(() => {
+    if (status === 'ready' && section === 'movements' && Date.now() - movementsAtRef.current > 60_000) void loadMovements();
+  }, [loadMovements, section, status]);
+
+  // Online orders. A new cash order (or a newly paid one) shows a toast, a short sound,
+  // a browser notification and a counter in the tab title.
   const loadWebOrders = useCallback(async () => {
     setWebLoading(true);
     try {
       const data = await request('/api/shop/web-orders');
       setWebData(data);
       setWebError('');
+      setWebLoaded(Date.now());
       const pending = (data.orders || []).filter(needsAttention).map(order => order.id);
       if (knownPending.current) {
         const fresh = (data.orders || []).filter(order => needsAttention(order) && !knownPending.current.has(order.id));
         if (fresh.length) {
-          const text = fresh.length === 1 ? `Nuevo pedido online: ${fresh[0].order_number}` : `${fresh.length} pedidos online nuevos`;
-          setToast(text);
-          window.setTimeout(() => setToast(''), 6000);
+          const text = fresh.length === 1 ? `Nuevo pedido online de ${fresh[0].customer_name}` : `${fresh.length} pedidos online nuevos`;
+          showToast(text, 'new', 7000);
           try {
             const audio = new (window.AudioContext || window.webkitAudioContext)();
-            const tone = audio.createOscillator(); const gain = audio.createGain();
-            tone.frequency.value = 880; gain.gain.setValueAtTime(.12, audio.currentTime); gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .6);
-            tone.connect(gain).connect(audio.destination); tone.start(); tone.stop(audio.currentTime + .6);
+            [0, .18].forEach((delay, index) => {
+              const tone = audio.createOscillator(); const gain = audio.createGain();
+              tone.frequency.value = index ? 1175 : 880;
+              gain.gain.setValueAtTime(.12, audio.currentTime + delay); gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + delay + .45);
+              tone.connect(gain).connect(audio.destination); tone.start(audio.currentTime + delay); tone.stop(audio.currentTime + delay + .45);
+            });
           } catch { }
-          try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('CR Perfumería', { body: text, icon: '/nuevologo.jpg' }); } catch { }
+          try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('CR Perfumería', { body: text, icon: '/nuevologo.jpg', tag: 'web-order' }); } catch { }
         }
       }
       knownPending.current = new Set(pending);
     } catch (error) {
       if (error.status !== 401) setWebError(error.message || 'No se pudieron cargar los pedidos online.');
     } finally { setWebLoading(false); }
-  }, [request]);
+  }, [request, showToast]);
 
   useEffect(() => {
     if (status !== 'ready') return undefined;
     void loadWebOrders();
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadWebOrders(); }, 30_000);
+    let last = Date.now();
+    const timer = window.setInterval(() => {
+      const wait = document.visibilityState === 'visible' ? ORDERS_VISIBLE_MS : ORDERS_HIDDEN_MS;
+      if (Date.now() - last >= wait - 1000) { last = Date.now(); void loadWebOrders(); }
+    }, ORDERS_VISIBLE_MS);
     return () => window.clearInterval(timer);
   }, [loadWebOrders, status]);
 
@@ -473,16 +579,26 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     document.title = count ? `(${count}) CR Perfumería · Gestión` : 'CR Perfumería · Gestión';
   }, [webData]);
 
-  const webOrderAction = async (order, action) => {
-    if (action === 'reject' && !window.confirm(`¿${order.order_status === 'pending_review' ? 'Rechazar' : 'Cancelar'} el pedido ${order.order_number}?\n\nEl stock reservado vuelve al inventario.`)) return;
+  useEffect(() => {
+    const onPop = () => setSectionState(sectionFromHash());
+    window.addEventListener('hashchange', onPop);
+    return () => window.removeEventListener('hashchange', onPop);
+  }, []);
+
+  const refreshAll = async () => {
+    await Promise.all([syncInventory({ force: true }), loadWebOrders()]);
+  };
+
+  const webOrderAction = async (order, action, note = '') => {
     setWebWorking(`${order.id}:${action}`);
     try {
-      await request('/api/shop/web-orders', { method: 'POST', body: JSON.stringify({ orderId: order.id, action }) });
+      await request('/api/shop/web-orders', { method: 'POST', body: JSON.stringify({ orderId: order.id, action, note }) });
       await loadWebOrders();
-      const done = { accept: 'Pedido aceptado.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado y stock devuelto.' }[action];
-      setToast(done); window.setTimeout(() => setToast(''), 3200);
+      const done = { accept: 'Pedido aceptado. Ya podés prepararlo.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado. El stock volvió al inventario.' }[action];
+      showToast(done);
+      if (action === 'reject' || action === 'deliver') void syncInventory({ force: action === 'reject' });
     } catch (error) {
-      setToast(error.message || 'No se pudo actualizar el pedido.'); window.setTimeout(() => setToast(''), 4200);
+      showToast(error.message || 'No se pudo actualizar el pedido.', 'danger', 5000);
     } finally { setWebWorking(''); }
   };
 
@@ -517,6 +633,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     setEditorError('');
     setEditorOpen(true);
   };
+  const closeEditor = useCallback(() => setEditorOpen(false), []);
 
   const saveProduct = async form => {
     setSavingProduct(true);
@@ -525,37 +642,41 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
       const { product } = await request('/api/shop/products', { method: 'POST', body: JSON.stringify({ ...form, price: Number(form.price), stock: Number(form.stock), barcodes: editorProduct?.barcodes || [form.barcode] }) });
       setCatalog(previous => [...previous.filter(item => item.barcode !== product.barcode), product].sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')));
       setEditorOpen(false);
-      setToast('Producto guardado.');
-      window.setTimeout(() => setToast(''), 3200);
+      showToast('Producto guardado.');
     } catch (error) { setEditorError(error.message || 'No se pudo guardar el producto.'); }
     finally { setSavingProduct(false); }
   };
 
   const deleteProduct = async product => {
-    const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borrará el producto. Las compras ya registradas se conservan.`);
+    const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borra el producto. Las ventas ya registradas se conservan.`);
     if (!confirmed) return;
     setDeletingBarcode(product.barcode);
     try {
       const result = await request(`/api/shop/products?barcode=${encodeURIComponent(product.barcode)}`, { method: 'DELETE' });
       if (result.barcode !== product.barcode) throw new Error('No se pudo confirmar la eliminación. Actualizá la lista y volvé a intentar.');
       setCatalog(previous => previous.filter(item => item.barcode !== product.barcode));
-      setToast('Producto eliminado del inventario.');
-      window.setTimeout(() => setToast(''), 3200);
+      showToast('Producto eliminado del inventario.');
     } catch (error) {
-      setToast(error.message || 'No se pudo eliminar el producto.');
-      window.setTimeout(() => setToast(''), 4200);
+      showToast(error.message || 'No se pudo eliminar el producto.', 'danger', 5000);
     } finally { setDeletingBarcode(''); }
   };
 
   if (mobile) return <MobileNotice theme={theme} />;
-  if (status === 'loading') return <main className={`management-loading ${theme === 'light' ? 'theme-light' : ''}`}><Logo /><span className="management-loader-ring"><Loader2 size={30} className="management-spin" /></span><p>Conectando con los datos del local…</p></main>;
+  if (status === 'loading') return <main className={`mg-screen ${theme === 'light' ? 'is-light' : ''}`}><div className="mg-entry mg-loading"><Logo /><Loader2 size={26} className="mg-spin" /><p>Conectando con los datos del local…</p></div></main>;
   if (status !== 'ready') return <EntryPanel password={password} setPassword={setPassword} onSubmit={login} busy={busy} message={message} onSales={onSales} theme={theme} />;
 
+  const orders = webData?.orders || [];
   return (
     <>
-      <ManagementShell webOrders={{ data: webData, loading: webLoading, error: webError, refresh: loadWebOrders, act: webOrderAction, working: webWorking, notificationsEnabled, enableNotifications }} catalog={catalog} section={section} setSection={setSection} movements={movements} loadingMovements={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onAdd={() => openEditor(null)} onEdit={openEditor} onDelete={deleteProduct} deletingBarcode={deletingBarcode} onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} />
-      {editorOpen && <ProductEditor key={editorProduct?.barcode || 'new-product'} product={editorProduct} busy={savingProduct} error={editorError} setError={setEditorError} onClose={() => setEditorOpen(false)} onSave={saveProduct} />}
-      {toast && <div className="management-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
+      <ManagementShell section={section} onSection={setSection} theme={theme} onSales={onSales} onLogout={logout} webOrders={{ data: webData }} lastSync={lastSync} syncing={syncing} onRefreshAll={refreshAll}>
+        {section === 'home' && <Dashboard catalog={catalog} orders={orders} onSection={setSection} onOpenOrder={openOrder} onEdit={openEditor} />}
+        {section === 'orders' && <WebOrdersPage data={webData} loading={webLoading} error={webError} onRefresh={loadWebOrders} onAction={webOrderAction} working={webWorking} notificationsEnabled={notificationsEnabled} onEnableNotifications={enableNotifications} selectedId={selectedOrderId} onSelect={setSelectedOrderId} lastLoaded={webLoaded} />}
+        {section === 'products' && <ProductsPage catalog={catalog} onEdit={openEditor} onAdd={() => openEditor(null)} onDelete={deleteProduct} deletingBarcode={deletingBarcode} initialFilter={productFilter} />}
+        {section === 'movements' && <MovementsPage movements={movements} loading={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onRefresh={loadMovements} />}
+        {section === 'settings' && <SettingsPage onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} notificationsEnabled={notificationsEnabled} onEnableNotifications={enableNotifications} lastSync={lastSync} onRefresh={() => syncInventory({ force: true })} syncing={syncing} />}
+      </ManagementShell>
+      {editorOpen && <ProductEditor key={editorProduct?.barcode || 'new-product'} product={editorProduct} busy={savingProduct} error={editorError} setError={setEditorError} onClose={closeEditor} onSave={saveProduct} />}
+      {toast && <div className={`mg-toast tone-${toast.tone}`} role="status">{toast.tone === 'danger' ? <AlertTriangle size={17} /> : toast.tone === 'new' ? <BellRing size={17} /> : <CheckCircle2 size={17} />}{toast.text}</div>}
     </>
   );
 }

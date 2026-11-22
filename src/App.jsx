@@ -1752,13 +1752,26 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     if (databaseStatus !== 'ready') return undefined;
     let active = true;
     let pending = false;
+    let lastVersion = '';
+    let lastFull = Date.now();
+    // Cheap change check first; the whole catalog is downloaded only when something changed
+    // (or every 10 minutes as a safety net). This keeps Supabase usage low on the free plan.
     const refreshSharedData = async () => {
       if (!active || pending || document.visibilityState !== 'visible') return;
       pending = true;
       try {
-        const state = await requestShop('/api/shop/state');
-        if (active) setCatalog((state.catalog || []).map(sanitizeStoredProduct));
-        if (screen === 'purchases') {
+        let changed = Date.now() - lastFull > 10 * 60_000;
+        try {
+          const { version } = await requestShop('/api/shop/state?version=1');
+          if (lastVersion && version !== lastVersion) changed = true;
+          lastVersion = version;
+        } catch { changed = true; }
+        if (changed) {
+          const state = await requestShop('/api/shop/state');
+          lastFull = Date.now();
+          if (active) setCatalog((state.catalog || []).map(sanitizeStoredProduct));
+        }
+        if (screen === 'purchases' && changed) {
           const { purchases: latestPurchases } = await requestShop('/api/shop/purchases');
           if (active) {
             setPurchases(latestPurchases || []);
@@ -1768,7 +1781,8 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       } catch { }
       finally { pending = false; }
     };
-    const timer = window.setInterval(refreshSharedData, 30_000);
+    void refreshSharedData();
+    const timer = window.setInterval(refreshSharedData, 60_000);
     const onVisible = () => { if (document.visibilityState === 'visible') void refreshSharedData(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
