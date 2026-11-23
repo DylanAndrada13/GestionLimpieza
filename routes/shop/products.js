@@ -1,5 +1,5 @@
 import { shopAccessResponse } from '../../lib/shop-auth.js';
-import { deleteShopProduct, resetShopInventory, saveShopProduct } from '../../lib/shop-data.js';
+import { deleteShopProduct, resetShopInventory, saveShopProduct, setShopProductImage } from '../../lib/shop-data.js';
 
 export async function POST(request) {
   const denied = shopAccessResponse(request);
@@ -7,7 +7,9 @@ export async function POST(request) {
   let input;
   try { input = await request.json(); } catch { return Response.json({ error: 'El cuerpo debe ser JSON.' }, { status: 400 }); }
   try {
-    return Response.json({ product: await saveShopProduct(input) }, { headers: { 'Cache-Control': 'no-store' } });
+    // "Poner foto" changes only image_url, so a stale screen can never overwrite stock or price.
+    const product = input?.action === 'image' ? await setShopProductImage(input) : await saveShopProduct(input);
+    return Response.json({ product }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return Response.json({ error: error.message || 'No se pudo guardar el producto. Probá de nuevo.' }, { status: error.status || 502, headers: { 'Cache-Control': 'no-store' } });
   }

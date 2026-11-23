@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CircleAlert,
   Home,
+  ImagePlus,
   Loader2,
   LogOut,
   Moon,
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 import { productBarcodes } from './catalog';
 import ThemePicker from './ThemePicker';
+import PhotosPage from './PhotosPage';
 import WebOrdersPage, { ORDER_LABEL, needsAttention, timeAgo } from './WebOrdersPage';
 import './management.css';
 
@@ -56,14 +58,15 @@ const NAV = [
   ] },
   { group: 'Inventario', items: [
     { id: 'products', label: 'Productos', icon: Package },
+    { id: 'photos', label: 'Poner foto', icon: ImagePlus },
     { id: 'movements', label: 'Movimientos', icon: ArrowDownUp },
   ] },
   { group: 'Local', items: [
     { id: 'settings', label: 'Configuración', icon: Settings },
   ] },
 ];
-const SECTION_IDS = ['home', 'orders', 'products', 'movements', 'settings'];
-const HASH = { home: '', orders: 'pedidos', products: 'productos', movements: 'movimientos', settings: 'configuracion' };
+const SECTION_IDS = ['home', 'orders', 'products', 'photos', 'movements', 'settings'];
+const HASH = { home: '', orders: 'pedidos', products: 'productos', photos: 'fotos', movements: 'movimientos', settings: 'configuracion' };
 const sectionFromHash = () => {
   const hash = window.location.hash.replace('#', '');
   return SECTION_IDS.find(id => HASH[id] === hash && hash) || 'home';
@@ -652,6 +655,20 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     finally { setSavingProduct(false); }
   };
 
+  const [savingImage, setSavingImage] = useState('');
+  const saveImage = async (product, image) => {
+    setSavingImage(product.barcode);
+    try {
+      const { product: saved } = await request('/api/shop/products', { method: 'POST', body: JSON.stringify({ action: 'image', barcode: product.barcode, image }) });
+      setCatalog(previous => previous.map(item => (item.barcode === saved.barcode ? saved : item)));
+      showToast(image ? 'Foto guardada. En un par de minutos aparece en la tienda.' : 'Foto quitada.');
+      return true;
+    } catch (error) {
+      showToast(error.message || 'No se pudo guardar la foto.', 'danger', 5000);
+      return false;
+    } finally { setSavingImage(''); }
+  };
+
   const deleteProduct = async product => {
     const confirmed = window.confirm(`¿Eliminar “${product.name}” del inventario?\n\nSe borra el producto. Las ventas ya registradas se conservan.`);
     if (!confirmed) return;
@@ -677,6 +694,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
         {section === 'home' && <Dashboard catalog={catalog} orders={orders} onSection={setSection} onOpenOrder={openOrder} onEdit={openEditor} />}
         {section === 'orders' && <WebOrdersPage data={webData} loading={webLoading} error={webError} onRefresh={loadWebOrders} onAction={webOrderAction} working={webWorking} notificationsEnabled={notificationsEnabled} onEnableNotifications={enableNotifications} selectedId={selectedOrderId} onSelect={setSelectedOrderId} lastLoaded={webLoaded} />}
         {section === 'products' && <ProductsPage catalog={catalog} onEdit={openEditor} onAdd={() => openEditor(null)} onDelete={deleteProduct} deletingBarcode={deletingBarcode} initialFilter={productFilter} />}
+        {section === 'photos' && <PhotosPage catalog={catalog} onSaveImage={saveImage} savingBarcode={savingImage} />}
         {section === 'movements' && <MovementsPage movements={movements} loading={loadingMovements} stockTrackingAvailable={stockTrackingAvailable} onRefresh={loadMovements} />}
         {section === 'settings' && <SettingsPage onSales={onSales} onLogout={logout} theme={theme} onThemeChange={onThemeChange} notificationsEnabled={notificationsEnabled} onEnableNotifications={enableNotifications} lastSync={lastSync} onRefresh={() => syncInventory({ force: true })} syncing={syncing} />}
       </ManagementShell>
