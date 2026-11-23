@@ -21,6 +21,8 @@ export function timeAgo(value, now = Date.now()) {
 }
 
 const LOCAL_PICKUPS = ['Local Itatí', 'Local La Haya'];
+const PICKUP_LABELS = { 'Maxi Carrefour': 'Maxi Carrefour (Camino Negro y Rodríguez)' };
+const placeName = point => PICKUP_LABELS[point] || point;
 export const pickupKind = order => order.pickup_type || (LOCAL_PICKUPS.includes(order.pickup_point) ? 'local' : 'encuentro');
 const pickupDate = (iso, long = false) => new Intl.DateTimeFormat('es-AR', long ? { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' } : { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
 const pickupDates = order => (Array.isArray(order.pickup_dates) ? order.pickup_dates : []).filter(Boolean).sort();
@@ -74,8 +76,8 @@ function whatsappText(order) {
   const first = String(order.customer_name || '').split(' ')[0];
   const dates = pickupDates(order);
   const where = pickupKind(order) === 'local'
-    ? `Ya lo podés retirar en ${order.pickup_point}.`
-    : `Para el encuentro en ${order.pickup_point}${dates.length ? `, elegiste ${dates.map(d => pickupDate(d)).join(', ')}` : ''}. ¿Qué día y a qué hora te queda mejor?`;
+    ? `Ya lo podés retirar en ${placeName(order.pickup_point)}.`
+    : `Para el encuentro en ${placeName(order.pickup_point)}${dates.length ? `, elegiste ${dates.map(d => pickupDate(d)).join(', ')}` : ''}. ¿Qué día y a qué hora te queda mejor?`;
   return `Hola ${first}, te escribimos de CR Perfumería por tu pedido ${order.order_number}. ${where}`;
 }
 
@@ -84,7 +86,7 @@ function orderSummary(order) {
   return [
     `Pedido ${order.order_number}`,
     `${order.customer_name}${order.customer_phone ? ` · ${order.customer_phone}` : ''}`,
-    `${pickupKind(order) === 'local' ? 'Retira en' : 'Punto de encuentro:'} ${order.pickup_point}`,
+    `${pickupKind(order) === 'local' ? 'Retira en' : 'Punto de encuentro:'} ${placeName(order.pickup_point)}`,
     ...(pickupDates(order).length ? [`Fechas posibles: ${pickupDates(order).map(d => pickupDate(d)).join(', ')}`] : []),
     ...lines,
     `Total ${money(order.total_amount)} · ${METHOD_LABEL[order.payment_method] || order.payment_method} · ${PAYMENT_LABEL[order.payment_status] || order.payment_status}`,
@@ -102,7 +104,7 @@ function OrderRow({ order, selected, onSelect, now }) {
       <span className="mg-order-row-top"><StatusChip status={order.order_status} /><time dateTime={order.created_at}>{timeAgo(order.created_at, now)}</time></span>
       <strong className="mg-order-row-name">{order.customer_name || order.customer_email}</strong>
       <span className="mg-order-row-meta">
-        <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {pickupKind(order) === 'local' ? '' : 'Encuentro en '}{order.pickup_point}</span>
+        <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {pickupKind(order) === 'local' ? '' : 'Encuentro en '}{placeName(order.pickup_point)}</span>
         <b>{money(order.total_amount)}</b>
       </span>
       <span className="mg-order-row-code">{order.order_number} · {order.payment_method === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}</span>
@@ -167,7 +169,7 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
 
       <section className="mg-ticket-block">
         <h3>Retiro</h3>
-        <p className="mg-pickup">{pickupKind(order) === 'local' ? <Store size={17} /> : <MapPin size={17} />}<span><strong>{order.pickup_point}</strong><small>{pickupKind(order) === 'local' ? 'Retiro en el local, en horario de atención' : 'Punto de encuentro: confirmale por WhatsApp una de las fechas y la hora'}</small></span></p>
+        <p className="mg-pickup">{pickupKind(order) === 'local' ? <Store size={17} /> : <MapPin size={17} />}<span><strong>{placeName(order.pickup_point)}</strong><small>{pickupKind(order) === 'local' ? 'Retiro en el local, en horario de atención' : 'Punto de encuentro: confirmale por WhatsApp una de las fechas y la hora'}</small></span></p>
         {pickupDates(order).length > 0 && (
           <ul className="mg-pickup-dates" aria-label="Fechas posibles que eligió el comprador">
             {pickupDates(order).map(date => <li key={date}><CalendarDays size={15} />{pickupDate(date, true)}</li>)}
