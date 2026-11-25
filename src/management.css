@@ -469,16 +469,3 @@
 .mg-print-ticket-paper iframe { display: block; flex: none; border: 0; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
 .mg-print-ticket-help { margin: 10px 0 0; color: var(--paper-muted); font-size: 12.5px; line-height: 1.45; }
 
-/* Últimos cobros de Mercado Pago (Pedidos online) */
-.mg-mp-payments { margin-bottom: 14px; }
-.mg-mp-payments-head { display: flex; flex-wrap: wrap; gap: 8px; }
-.mg-mp-payments-head .mg-badge { margin-left: 6px; background: var(--new); color: #1d1204; }
-.mg-mp-payments-body { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); overflow-x: auto; }
-.mg-mp-payments-body > p { margin: 0 0 8px; font-size: 13px; }
-.mg-mp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.mg-mp-table th { padding: 0 8px 6px 0; color: var(--muted); font-size: 12px; font-weight: 500; text-align: left; }
-.mg-mp-table td { padding: 7px 8px 7px 0; border-top: 1px solid var(--line); vertical-align: top; }
-.mg-mp-table td small { display: block; color: var(--muted); font-size: 12px; }
-.mg-mp-table .mg-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mg-mp-table tr.is-match td { background: color-mix(in srgb, var(--new) 10%, transparent); }
-.mg-mp-table .mg-mp-match { color: var(--new); font-weight: 600; }

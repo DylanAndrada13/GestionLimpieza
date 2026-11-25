@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Landmark, Loader2, Mail, MapPin, MessageCircle, Wallet,
+  AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Landmark, Loader2, Mail, MapPin, MessageCircle,
   Phone, RefreshCw, Search, ShoppingBag, StickyNote, Store, X,
 } from 'lucide-react';
 import PrintTicket from './PrintTicket.jsx';
@@ -274,72 +274,6 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
   );
 }
 
-const PAY_STATUS = { approved: 'Acreditado', pending: 'Pendiente', in_process: 'En proceso', rejected: 'Rechazado', cancelled: 'Cancelado', refunded: 'Devuelto', charged_back: 'Contracargo' };
-
-// Latest money that came in to the Mercado Pago account connected in the shop. Read-only:
-// it helps check a transfer without opening the app. Confirming the order is still a tap.
-function MpPaymentsPanel({ orders }) {
-  const [open, setOpen] = useState(false);
-  const [state, setState] = useState({ loading: false, error: '', data: null });
-  const load = async () => {
-    setState(current => ({ ...current, loading: true, error: '' }));
-    try {
-      const response = await fetch('/api/shop/mp-payments?days=7', { cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'No se pudieron consultar los cobros.');
-      setState({ loading: false, error: '', data });
-    } catch (error) { setState({ loading: false, error: error.message, data: null }); }
-  };
-  const toggle = () => { const next = !open; setOpen(next); if (next && !state.data) void load(); };
-  const pendingTransfers = orders.filter(order => order.payment_method === 'transferencia' && order.order_status === 'pending_review');
-  const matchFor = payment => {
-    if (payment.orderNumber) return `Pedido ${payment.orderNumber}`;
-    if (payment.status !== 'approved') return '';
-    const same = pendingTransfers.filter(order => Math.abs(Number(order.total_amount) - payment.amount) < 0.01);
-    return same.length ? `Mismo monto que ${same.map(order => `${order.order_number} (${order.customer_name})`).join(', ')}` : '';
-  };
-  const payments = state.data?.payments || [];
-  return (
-    <section className="mg-mp-payments">
-      <div className="mg-mp-payments-head">
-        <button type="button" className="mg-btn ghost" onClick={toggle} aria-expanded={open}><Wallet size={16} /> {open ? 'Ocultar últimos cobros' : 'Ver últimos cobros de Mercado Pago'}{pendingTransfers.length > 0 && <b className="mg-badge">{pendingTransfers.length} a verificar</b>}</button>
-        {open && <button type="button" className="mg-btn ghost" onClick={load} disabled={state.loading}>{state.loading ? <Loader2 size={16} className="mg-spin" /> : <RefreshCw size={16} />} Actualizar</button>}
-      </div>
-      {open && (
-        <div className="mg-mp-payments-body">
-          {state.error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{state.error}</div>}
-          {state.loading && !state.data && <p className="mg-muted"><Loader2 size={15} className="mg-spin" /> Consultando Mercado Pago…</p>}
-          {state.data && !state.data.connected && <p className="mg-muted">No hay una cuenta de Mercado Pago conectada en la tienda.</p>}
-          {state.data?.connected && (
-            <>
-              <p className="mg-muted">Cobros de los últimos {state.data.days} días en {state.data.sellerNickname || 'la cuenta conectada'}.</p>
-              {payments.length === 0 ? <p className="mg-muted">No entró ningún cobro en estos días.</p> : (
-                <table className="mg-mp-table">
-                  <thead><tr><th scope="col">Fecha</th><th scope="col">De</th><th scope="col">Tipo</th><th scope="col">Estado</th><th scope="col" className="mg-num">Monto</th></tr></thead>
-                  <tbody>
-                    {payments.map(payment => {
-                      const match = matchFor(payment);
-                      return (
-                        <tr key={payment.id} className={match && !payment.orderNumber ? 'is-match' : ''}>
-                          <td>{dateTime(payment.date)}</td>
-                          <td>{payment.payer || '—'}{payment.payerDni && <small>DNI/CUIT {payment.payerDni}</small>}{match && <small className="mg-mp-match">{match}</small>}</td>
-                          <td>{payment.kind}</td>
-                          <td>{PAY_STATUS[payment.status] || payment.status}</td>
-                          <td className="mg-num">{money(payment.amount)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
 export default function WebOrdersPage({ data, loading, error, onRefresh, onAction, working, notificationsEnabled, onEnableNotifications, selectedId, onSelect, lastLoaded }) {
   const [filter, setFilter] = useState('attention');
   const [term, setTerm] = useState('');
@@ -376,7 +310,6 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       {data?.available && data.pickup && data.transfer === false && <div className="mg-notice"><AlertTriangle size={17} />Para recibir pagos por transferencia y ver el recargo online, corré en Supabase la migración 202611250001 de la tienda.</div>}
       {error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{error}</div>}
 
-      <MpPaymentsPanel orders={orders} />
 
       <div className="mg-toolbar">
         <div className="mg-tabs" role="tablist" aria-label="Filtrar pedidos">
