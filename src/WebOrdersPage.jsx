@@ -44,9 +44,12 @@ const TONE = { pending_review: 'new', confirmed: 'new', preparing: 'work', ready
 // Orders the local has to act on: new cash orders and paid or accepted orders not delivered yet.
 export const needsAttention = order => ['pending_review', 'confirmed', 'preparing', 'ready_for_pickup'].includes(order.order_status);
 
+// Para atender: cash orders the local still has to accept. Pagados: paid or accepted orders
+// being prepared or waiting for pickup. Completados: delivered.
 const FILTERS = [
-  ['attention', 'Para atender', needsAttention],
-  ['closed', 'Cerrados', order => ['delivered', 'cancelled'].includes(order.order_status)],
+  ['attention', 'Para atender', order => order.order_status === 'pending_review'],
+  ['paid', 'Pagados', order => ['confirmed', 'preparing', 'ready_for_pickup'].includes(order.order_status)],
+  ['done', 'Completados', order => order.order_status === 'delivered'],
   ['all', 'Todos', () => true],
 ];
 
@@ -293,7 +296,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       <div className={`mg-orders-split ${selected ? 'has-selection' : ''}`}>
         <div className="mg-order-list">
           {loading && !data && <div className="mg-empty"><Loader2 size={22} className="mg-spin" /><p>Cargando pedidos…</p></div>}
-          {data && visible.length === 0 && <div className="mg-empty"><ShoppingBag size={24} /><p>{term ? 'Ningún pedido coincide con la búsqueda.' : filter === 'attention' ? 'No hay pedidos para atender. Cuando entre uno, suena un aviso.' : 'No hay pedidos en esta vista.'}</p></div>}
+          {data && visible.length === 0 && <div className="mg-empty"><ShoppingBag size={24} /><p>{term ? 'Ningún pedido coincide con la búsqueda.' : filter === 'attention' ? 'No hay pedidos en efectivo para confirmar. Cuando entre uno, suena un aviso.' : 'No hay pedidos en esta vista.'}</p></div>}
           {visible.map(order => <OrderRow key={order.id} order={order} selected={order.id === selectedId} onSelect={onSelect} now={now} />)}
         </div>
         <div className="mg-order-detail">
