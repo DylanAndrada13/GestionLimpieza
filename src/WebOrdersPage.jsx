@@ -84,7 +84,9 @@ function whatsappText(order) {
   const dates = pickupDates(order);
   const where = pickupKind(order) === 'local'
     ? `Ya lo podés retirar en ${placeName(order.pickup_point)}.`
-    : `Para el encuentro en ${placeName(order.pickup_point)}${dates.length ? `, elegiste ${dates.map(d => pickupDate(d)).join(', ')}` : ''}. ¿Qué día y a qué hora te queda mejor?`;
+    : dates.length === 1
+      ? `Para el encuentro en ${placeName(order.pickup_point)} el ${pickupDate(dates[0])}. ¿A qué hora te queda mejor?`
+      : `Para el encuentro en ${placeName(order.pickup_point)}${dates.length ? `, elegiste ${dates.map(d => pickupDate(d)).join(', ')}` : ''}. ¿Qué día y a qué hora te queda mejor?`;
   return `Hola ${first}, te escribimos de CR Perfumería por tu pedido ${order.order_number}. ${where}`;
 }
 
@@ -103,7 +105,7 @@ function orderSummary(order) {
     `Pedido ${order.order_number}`,
     `${order.customer_name}${order.customer_phone ? ` · ${order.customer_phone}` : ''}`,
     `${pickupKind(order) === 'local' ? 'Retira en' : 'Punto de encuentro:'} ${placeName(order.pickup_point)}`,
-    ...(pickupDates(order).length ? [`Fechas posibles: ${pickupDates(order).map(d => pickupDate(d)).join(', ')}`] : []),
+    ...(pickupDates(order).length ? [`${pickupDates(order).length === 1 ? 'Fecha de entrega' : 'Fechas posibles'}: ${pickupDates(order).map(d => pickupDate(d)).join(', ')}`] : []),
     ...lines,
     `Total ${money(order.total_amount)} · ${METHOD_LABEL[order.payment_method] || order.payment_method} · ${PAYMENT_LABEL[order.payment_status] || order.payment_status}`,
   ].join('\n');
@@ -192,13 +194,13 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
 
       <section className="mg-ticket-block">
         <h3>Retiro</h3>
-        <p className="mg-pickup">{pickupKind(order) === 'local' ? <Store size={17} /> : <MapPin size={17} />}<span><strong>{placeName(order.pickup_point)}</strong><small>{pickupKind(order) === 'local' ? 'Retiro en el local, en horario de atención' : 'Punto de encuentro: confirmale por WhatsApp una de las fechas y la hora'}</small></span></p>
+        <p className="mg-pickup">{pickupKind(order) === 'local' ? <Store size={17} /> : <MapPin size={17} />}<span><strong>{placeName(order.pickup_point)}</strong><small>{pickupKind(order) === 'local' ? 'Retiro en el local, en horario de atención' : (pickupDates(order).length > 1 ? 'Punto de encuentro: confirmale por WhatsApp una de las fechas y la hora' : 'Punto de encuentro: confirmale por WhatsApp la hora')}</small></span></p>
         {pickupDates(order).length > 0 && (
-          <ul className="mg-pickup-dates" aria-label="Fechas posibles que eligió el comprador">
+          <ul className="mg-pickup-dates" aria-label={pickupDates(order).length === 1 ? 'Fecha de entrega que eligió el comprador' : 'Fechas posibles que eligió el comprador'}>
             {pickupDates(order).map(date => <li key={date}><CalendarDays size={15} />{pickupDate(date, true)}</li>)}
           </ul>
         )}
-        {pickupKind(order) === 'encuentro' && !pickupDates(order).length && <p className="mg-pickup-missing">{pickupInfo ? 'El comprador no dejó fechas (pedido anterior al cambio).' : 'Para ver las fechas que eligió, corré en Supabase la migración 202611220004 de la tienda.'}</p>}
+        {pickupKind(order) === 'encuentro' && !pickupDates(order).length && <p className="mg-pickup-missing">{pickupInfo ? 'El comprador no dejó fecha (pedido anterior al cambio).' : 'Para ver la fecha que eligió, corré en Supabase la migración 202611220004 de la tienda.'}</p>}
       </section>
 
       <section className="mg-ticket-block">
@@ -370,7 +372,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       {data && !data.available && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Todavía no existen las tablas de pedidos online en Supabase.</div>}
       {data?.available && !data.migrated && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Falta correr la migración de pedidos en efectivo y stock en Supabase. Hasta entonces no se pueden aceptar ni cerrar pedidos desde acá.</div>}
       {data?.available && data.migrated && data.contact === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver el teléfono y la nota del comprador, corré en Supabase la migración 202611220003 de la tienda.</div>}
-      {data?.available && data.contact && data.pickup === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver si retiran en el local o en un punto de encuentro, y las 3 fechas que eligieron, corré en Supabase la migración 202611220004 de la tienda.</div>}
+      {data?.available && data.contact && data.pickup === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver si retiran en el local o en un punto de encuentro, y la fecha de entrega que eligieron, corré en Supabase la migración 202611220004 de la tienda.</div>}
       {data?.available && data.pickup && data.transfer === false && <div className="mg-notice"><AlertTriangle size={17} />Para recibir pagos por transferencia y ver el recargo online, corré en Supabase la migración 202611250001 de la tienda.</div>}
       {error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{error}</div>}
 
