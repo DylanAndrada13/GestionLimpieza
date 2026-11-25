@@ -602,7 +602,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     try {
       await request('/api/shop/web-orders', { method: 'POST', body: JSON.stringify({ orderId: order.id, action, note }) });
       await loadWebOrders();
-      const done = { accept: 'Pedido aceptado. Ya podés prepararlo.', confirm_payment: 'Pago confirmado. El pedido pasó a Pagados; avisale por WhatsApp.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado. El stock volvió al inventario.' }[action];
+      const done = { accept: 'Pedido aceptado. Ya podés prepararlo. Avisale por WhatsApp desde el pedido.', confirm_payment: 'Pago confirmado. El pedido pasó a Pagados; avisale por WhatsApp.', ready: 'Pedido marcado como listo para retirar. Avisale por WhatsApp desde el pedido.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado. El stock volvió al inventario.' }[action];
       showToast(done);
       if (action === 'reject' || action === 'deliver') void syncInventory({ force: action === 'reject' });
     } catch (error) {

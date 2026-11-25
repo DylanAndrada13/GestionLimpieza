@@ -90,6 +90,40 @@ function whatsappText(order) {
   return `Hola ${first}, te escribimos de CR Perfumería por tu pedido ${order.order_number}. ${where}`;
 }
 
+// 'hoy', 'mañana' or 'el jueves 27 de noviembre', counted on the Argentine calendar (UTC-3). Null once the date passed.
+function relativeDay(iso) {
+  const today = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (!iso || iso < today) return null;
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (iso === today) return 'hoy';
+  if (iso === tomorrow) return 'mañana';
+  return `el ${pickupDate(iso, true).replace(",", "")}`;
+}
+
+// Meeting-point sentence: the chosen date, or a request for another Thursday when it already passed.
+function meetingLine(order, lead) {
+  const dates = pickupDates(order);
+  const upcoming = dates.map(relativeDay).find(Boolean);
+  if (dates.length && !upcoming) return ' La fecha que elegiste ya pasó: ¿qué otro jueves te queda bien?';
+  return ` ${lead} ${placeName(order.pickup_point)}${upcoming ? ` ${upcoming}` : ''}. ¿A qué hora te queda mejor?`;
+}
+
+// WhatsApp message for the buyer that matches the order's status, pickup and date.
+export function statusWhatsappText(order) {
+  const first = String(order.customer_name || '').split(' ')[0];
+  const local = pickupKind(order) === 'local';
+  if (['preparing', 'confirmed'].includes(order.order_status)) {
+    const tail = local ? ` Te avisamos cuando esté listo para retirar en ${placeName(order.pickup_point)}.` : meetingLine(order, 'Te lo llevamos al encuentro en');
+    return `¡Hola ${first}! Tu pedido ${order.order_number} de CR Perfumería ya está en preparación.${tail}`;
+  }
+  if (order.order_status === 'ready_for_pickup') {
+    if (local) return `¡Hola ${first}! Tu pedido ${order.order_number} ya está listo. Podés pasar a retirarlo por ${placeName(order.pickup_point)} en el horario de atención.`;
+    const line = meetingLine(order, 'ya está listo para el encuentro en');
+    return line.startsWith(' La fecha') ? `¡Hola ${first}! Tu pedido ${order.order_number} ya está listo.${line}` : `¡Hola ${first}! Tu pedido ${order.order_number}${line}`;
+  }
+  return whatsappText(order);
+}
+
 // Message for the buyer once the local confirmed the transfer.
 export function paidWhatsappText(order) {
   const first = String(order.customer_name || '').split(' ')[0];
@@ -175,7 +209,8 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
 
       {order.order_status === 'pending_review' && order.payment_method !== 'transferencia' && <div className="mg-notice tone-new"><BellRing size={17} />Pedido nuevo en efectivo. El stock ya está reservado: aceptalo para prepararlo o rechazalo para devolverlo.</div>}
       {transferPending && <div className="mg-notice tone-new"><Landmark size={17} />Transferencia a verificar. Revisá en la app de Naranja X que hayan entrado <b>{money(order.total_amount)}</b> de {order.customer_name}{order.customer_dni ? ` (DNI ${order.customer_dni})` : ''}. Si llegó, tocá Confirmar pago. El stock ya está reservado.</div>}
-      {transferPaid && wa && <div className="mg-notice tone-new"><CheckCircle2 size={17} />Transferencia confirmada. Avisale al comprador: <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(paidWhatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Enviar WhatsApp de pago recibido</a></div>}
+      {transferPaid && wa && order.order_status !== 'ready_for_pickup' && <div className="mg-notice tone-new"><CheckCircle2 size={17} />Transferencia confirmada. Avisale al comprador: <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(paidWhatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Enviar WhatsApp de pago recibido</a></div>}
+      {wa && ['preparing', 'confirmed', 'ready_for_pickup'].includes(order.order_status) && !(transferPaid && order.order_status !== 'ready_for_pickup') && <div className="mg-notice tone-new"><MessageCircle size={17} />{order.order_status === 'ready_for_pickup' ? 'Pedido listo.' : 'Pedido en preparación.'} <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(statusWhatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Avisar al cliente por WhatsApp</a></div>}
       {order.stock_shortage?.length > 0 && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Faltó stock al descontar {order.stock_shortage.length === 1 ? 'un producto' : `${order.stock_shortage.length} productos`}: {order.stock_shortage.map(s => `${s.barcode} (pedido ${s.requested}, había ${s.available})`).join(', ')}.</div>}
       {order.status_note && <div className="mg-notice"><StickyNote size={17} />Motivo registrado: {order.status_note}</div>}
 
@@ -186,7 +221,7 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
         <ul className="mg-contact">
           <li><Mail size={15} /><a href={`mailto:${order.customer_email}?subject=${encodeURIComponent(`Tu pedido ${order.order_number}`)}`}>{order.customer_email}</a></li>
           {order.customer_phone
-            ? <li><Phone size={15} /><a href={`tel:${String(order.customer_phone).replace(/[^\d+]/g, '')}`}>{order.customer_phone}</a>{wa && <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(whatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}</li>
+            ? <li><Phone size={15} /><a href={`tel:${String(order.customer_phone).replace(/[^\d+]/g, '')}`}>{order.customer_phone}</a>{wa && <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(statusWhatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> WhatsApp</a>}</li>
             : <li className="is-muted"><Phone size={15} />{contactAvailable ? 'No dejó teléfono (pedido anterior al cambio)' : 'Teléfono no disponible: falta correr la migración de contacto en Supabase'}</li>}
         </ul>
         {order.customer_note && <blockquote className="mg-buyer-note">{order.customer_note}</blockquote>}
