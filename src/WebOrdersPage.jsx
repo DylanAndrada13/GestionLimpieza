@@ -46,7 +46,6 @@ export const needsAttention = order => ['pending_review', 'confirmed', 'preparin
 
 const FILTERS = [
   ['attention', 'Para atender', needsAttention],
-  ['awaiting_payment', 'Esperando pago', order => order.order_status === 'awaiting_payment'],
   ['closed', 'Cerrados', order => ['delivered', 'cancelled'].includes(order.order_status)],
   ['all', 'Todos', () => true],
 ];
