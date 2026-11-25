@@ -457,3 +457,14 @@
 .mg-photo-fields .mg-field { width: 100%; }
 .mg-photo-actions { display: flex; gap: 8px; margin-top: auto; }
 @media (max-width: 1179px) { .mg-photo-form { grid-template-columns: 1fr; padding-left: 16px; } }
+
+/* Printable purchase ticket inside the order detail */
+.mg-print-ticket-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.mg-print-ticket-papers { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; border: 1px solid var(--paper-line); background: #f1f1ec; }
+.mg-print-ticket-papers button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--paper-muted); font-size: 13px; font-weight: 550; cursor: pointer; }
+.mg-print-ticket-papers button.is-active { background: #fff; color: var(--paper-ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.mg-print-ticket-check { display: inline-flex; align-items: center; gap: 6px; color: var(--paper-ink); font-size: 14px; cursor: pointer; }
+.mg-print-ticket-bar .mg-btn { margin-left: auto; }
+.mg-print-ticket-paper { display: flex; justify-content: center; padding: 16px; border-radius: 8px; background: #e7e7e1; overflow-x: auto; }
+.mg-print-ticket-paper iframe { display: block; flex: none; border: 0; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.mg-print-ticket-help { margin: 10px 0 0; color: var(--paper-muted); font-size: 12.5px; line-height: 1.45; }

@@ -3,6 +3,7 @@ import {
   AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Loader2, Mail, MapPin, MessageCircle,
   Phone, RefreshCw, Search, ShoppingBag, StickyNote, Store, X,
 } from 'lucide-react';
+import PrintTicket from './PrintTicket.jsx';
 
 const money = value => `$${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value) || 0)}`;
 const dateTime = value => {
@@ -205,6 +206,11 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
           {order.mp_payment_id && <div><dt>Operación MP</dt><dd className="mg-code">{order.mp_payment_id}</dd></div>}
           <div><dt>Stock</dt><dd>{order.stock_restored_at ? 'Devuelto al inventario' : order.stock_applied_at ? 'Descontado del inventario' : order.payment_method === 'mercado_pago' ? 'Se descuenta cuando se confirma el pago' : 'Sin descontar'}</dd></div>
         </dl>
+      </section>
+
+      <section className="mg-ticket-block">
+        <h3>Ticket de compra</h3>
+        <PrintTicket order={order} />
       </section>
 
       <section className="mg-ticket-block">
