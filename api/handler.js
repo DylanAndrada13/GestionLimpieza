@@ -12,6 +12,7 @@ import * as shopPurchases from '../routes/shop/purchases.js';
 import * as shopSession from '../routes/shop/session.js';
 import * as shopState from '../routes/shop/state.js';
 import * as shopWebOrders from '../routes/shop/web-orders.js';
+import * as shopMpPayments from '../routes/shop/mp-payments.js';
 import * as upcitemdbLookup from '../routes/upcitemdb/lookup.js';
 
 const ROUTES = {
@@ -27,6 +28,7 @@ const ROUTES = {
   'shop/session': shopSession,
   'shop/state': shopState,
   'shop/web-orders': shopWebOrders,
+  'shop/mp-payments': shopMpPayments,
   'upcitemdb/lookup': upcitemdbLookup,
 };
 

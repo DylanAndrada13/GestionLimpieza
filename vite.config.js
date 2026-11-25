@@ -8,6 +8,8 @@ import { GET as listShopPurchases, POST as recordShopPurchase } from './routes/s
 import { GET as listShopMovements } from './routes/shop/movements.js';
 import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './routes/shop/history.js';
 import { POST as saveShopCart } from './routes/shop/cart.js';
+import { GET as listWebOrders, POST as updateWebOrder } from './routes/shop/web-orders.js';
+import { GET as listMpPayments } from './routes/shop/mp-payments.js';
 
 function ezCatalogDevApi() {
   return {
@@ -40,6 +42,8 @@ function shopDataDevApi() {
     '/movements': { GET: listShopMovements },
     '/cart': { POST: saveShopCart },
     '/history': { GET: listShopHistory, POST: recordShopHistory, DELETE: clearShopHistory },
+    '/web-orders': { GET: listWebOrders, POST: updateWebOrder },
+    '/mp-payments': { GET: listMpPayments },
   };
   return {
     name: 'shop-data-local-api',
@@ -69,7 +73,7 @@ function shopDataDevApi() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  for (const name of ['SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SHOP_ACCESS_PASSWORD', 'EZ_CATALOG_API_KEY']) {
+  for (const name of ['SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SHOP_ACCESS_PASSWORD', 'EZ_CATALOG_API_KEY', 'SHOP_API_URL', 'SHOP_STAFF_API_KEY', 'SHOP_RECONCILE_URL']) {
     if (!process.env[name] && env[name]) process.env[name] = env[name];
   }
   return {

@@ -11,6 +11,7 @@ import { GET as listShopMovements } from './routes/shop/movements.js';
 import { GET as listShopHistory, POST as recordShopHistory, DELETE as clearShopHistory } from './routes/shop/history.js';
 import { POST as saveShopCart } from './routes/shop/cart.js';
 import { GET as listWebOrders, POST as updateWebOrder } from './routes/shop/web-orders.js';
+import { GET as listMpPayments } from './routes/shop/mp-payments.js';
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,7 @@ const shopHandlers = {
   'DELETE /api/shop/history': clearShopHistory,
   'GET /api/shop/web-orders': listWebOrders,
   'POST /api/shop/web-orders': updateWebOrder,
+  'GET /api/shop/mp-payments': listMpPayments,
 };
 
 app.all('/api/shop/:resource', async (req, res, next) => {

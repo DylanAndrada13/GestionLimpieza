@@ -52,6 +52,10 @@
       "destination": "/api/handler?route=shop/web-orders"
     },
     {
+      "source": "/api/shop/mp-payments",
+      "destination": "/api/handler?route=shop/mp-payments"
+    },
+    {
       "source": "/api/upcitemdb/lookup",
       "destination": "/api/handler?route=upcitemdb/lookup"
     },

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Loader2, Mail, MapPin, MessageCircle,
+  AlertTriangle, Banknote, BellRing, CalendarDays, CheckCircle2, Copy, CreditCard, Landmark, Loader2, Mail, MapPin, MessageCircle, Wallet,
   Phone, RefreshCw, Search, ShoppingBag, StickyNote, Store, X,
 } from 'lucide-react';
 import PrintTicket from './PrintTicket.jsx';
@@ -30,6 +30,7 @@ const pickupDates = order => (Array.isArray(order.pickup_dates) ? order.pickup_d
 
 export const ORDER_LABEL = {
   pending_review: 'Nuevo, sin aceptar',
+  transfer_review: 'Transferencia a verificar',
   awaiting_payment: 'Esperando pago',
   confirmed: 'Pagado, a preparar',
   preparing: 'En preparación',
@@ -39,12 +40,14 @@ export const ORDER_LABEL = {
 };
 const PAYMENT_LABEL = { pending: 'Sin pagar', pending_verification: 'Pago en revisión', paid: 'Pagado', failed: 'Pago rechazado o anulado', refunded: 'Devuelto' };
 const METHOD_LABEL = { efectivo: 'Efectivo al retirar', mercado_pago: 'Mercado Pago', transferencia: 'Transferencia' };
-const TONE = { pending_review: 'new', confirmed: 'new', preparing: 'work', ready_for_pickup: 'ready', delivered: 'done', cancelled: 'off', awaiting_payment: 'wait' };
+// A transfer waiting for the local to check the money gets its own label.
+export const statusKey = order => (order.payment_method === 'transferencia' && order.order_status === 'pending_review' ? 'transfer_review' : order.order_status);
+const TONE = { transfer_review: 'new', pending_review: 'new', confirmed: 'new', preparing: 'work', ready_for_pickup: 'ready', delivered: 'done', cancelled: 'off', awaiting_payment: 'wait' };
 
 // Orders the local has to act on: new cash orders and paid or accepted orders not delivered yet.
 export const needsAttention = order => ['pending_review', 'confirmed', 'preparing', 'ready_for_pickup'].includes(order.order_status);
 
-// Para atender: cash orders the local still has to accept. Pagados: paid or accepted orders
+// Para atender: cash orders the local still has to accept and transfers to verify. Pagados: paid or accepted orders
 // being prepared or waiting for pickup. Completados: delivered.
 const FILTERS = [
   ['attention', 'Para atender', order => order.order_status === 'pending_review'],
@@ -55,6 +58,7 @@ const FILTERS = [
 
 function actionsFor(order) {
   const cash = order.payment_method === 'efectivo';
+  if (order.payment_method === 'transferencia' && order.order_status === 'pending_review') return [['confirm_payment', 'Confirmar pago', 'primary'], ['reject', 'Rechazar', 'danger']];
   switch (order.order_status) {
     case 'pending_review': return [['accept', 'Aceptar pedido', 'primary'], ['reject', 'Rechazar', 'danger']];
     case 'confirmed': return [['deliver', 'Entregado', 'primary'], ['ready', 'Listo para retirar', 'secondary']];
@@ -84,6 +88,15 @@ function whatsappText(order) {
   return `Hola ${first}, te escribimos de CR Perfumería por tu pedido ${order.order_number}. ${where}`;
 }
 
+// Message for the buyer once the local confirmed the transfer.
+export function paidWhatsappText(order) {
+  const first = String(order.customer_name || '').split(' ')[0];
+  const where = pickupKind(order) === 'local'
+    ? `Te avisamos cuando esté listo para retirar en ${placeName(order.pickup_point)}.`
+    : `Te escribimos para confirmar el día y la hora del encuentro en ${placeName(order.pickup_point)}.`;
+  return `¡Hola ${first}! Recibimos tu transferencia de ${money(order.total_amount)} por el pedido ${order.order_number} de CR Perfumería. Ya lo estamos preparando. ${where}`;
+}
+
 function orderSummary(order) {
   const lines = (order.web_order_items || []).map(item => `• ${item.quantity} × ${item.product_name} (${money(item.line_total ?? item.quantity * item.unit_price)})`);
   return [
@@ -96,7 +109,8 @@ function orderSummary(order) {
   ].join('\n');
 }
 
-function StatusChip({ status }) {
+function StatusChip({ order }) {
+  const status = statusKey(order);
   return <span className={`mg-chip tone-${TONE[status] || 'wait'}`}><i />{ORDER_LABEL[status] || status}</span>;
 }
 
@@ -104,13 +118,13 @@ function OrderRow({ order, selected, onSelect, now }) {
   const units = (order.web_order_items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   return (
     <button type="button" className={`mg-order-row ${selected ? 'is-selected' : ''} ${order.order_status === 'pending_review' ? 'is-new' : ''}`} onClick={() => onSelect(order.id)} aria-current={selected ? 'true' : undefined}>
-      <span className="mg-order-row-top"><StatusChip status={order.order_status} /><time dateTime={order.created_at}>{timeAgo(order.created_at, now)}</time></span>
+      <span className="mg-order-row-top"><StatusChip order={order} /><time dateTime={order.created_at}>{timeAgo(order.created_at, now)}</time></span>
       <strong className="mg-order-row-name">{order.customer_name || order.customer_email}</strong>
       <span className="mg-order-row-meta">
         <span>{units} {units === 1 ? 'unidad' : 'unidades'} · {pickupKind(order) === 'local' ? '' : 'Encuentro en '}{placeName(order.pickup_point)}</span>
         <b>{money(order.total_amount)}</b>
       </span>
-      <span className="mg-order-row-code">{order.order_number} · {order.payment_method === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}</span>
+      <span className="mg-order-row-code">{order.order_number} · {order.payment_method === 'efectivo' ? 'Efectivo' : order.payment_method === 'transferencia' ? 'Transferencia' : 'Mercado Pago'}</span>
     </button>
   );
 }
@@ -118,8 +132,8 @@ function OrderRow({ order, selected, onSelect, now }) {
 function Timeline({ order }) {
   const steps = [
     ['Pedido hecho', order.created_at],
-    order.reviewed_at && [order.order_status === 'cancelled' && !order.delivered_at ? 'Revisado por el local' : 'Aceptado por el local', order.reviewed_at],
-    order.paid_at && ['Pago confirmado', order.paid_at],
+    order.reviewed_at && !order.payment_confirmed_at && [order.order_status === 'cancelled' && !order.delivered_at ? 'Revisado por el local' : 'Aceptado por el local', order.reviewed_at],
+    order.paid_at && [order.payment_method === 'transferencia' ? 'Transferencia confirmada por el local' : 'Pago confirmado', order.paid_at],
     order.delivered_at && ['Entregado', order.delivered_at],
     order.stock_restored_at && ['Stock devuelto al inventario', order.stock_restored_at],
   ].filter(Boolean).sort((a, b) => new Date(a[1]) - new Date(b[1]));
@@ -133,6 +147,9 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
   useEffect(() => { setRejecting(false); setNote(''); setCopied(false); }, [order.id]);
 
   const cash = order.payment_method === 'efectivo';
+  const transfer = order.payment_method === 'transferencia';
+  const transferPending = transfer && order.order_status === 'pending_review';
+  const transferPaid = transfer && order.payment_status === 'paid' && !['delivered', 'cancelled'].includes(order.order_status);
   const items = order.web_order_items || [];
   const units = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const wa = whatsappNumber(order.customer_phone);
@@ -149,18 +166,21 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
           <p>Hecho el {dateTime(order.created_at)}</p>
         </div>
         <div className="mg-ticket-head-side">
-          <StatusChip status={order.order_status} />
+          <StatusChip order={order} />
           <button type="button" className="mg-icon-btn mg-ticket-close" onClick={onClose} aria-label="Cerrar detalle"><X size={18} /></button>
         </div>
       </header>
 
-      {order.order_status === 'pending_review' && <div className="mg-notice tone-new"><BellRing size={17} />Pedido nuevo en efectivo. El stock ya está reservado: aceptalo para prepararlo o rechazalo para devolverlo.</div>}
+      {order.order_status === 'pending_review' && order.payment_method !== 'transferencia' && <div className="mg-notice tone-new"><BellRing size={17} />Pedido nuevo en efectivo. El stock ya está reservado: aceptalo para prepararlo o rechazalo para devolverlo.</div>}
+      {transferPending && <div className="mg-notice tone-new"><Landmark size={17} />Transferencia a verificar. Revisá en Mercado Pago (o en Últimos cobros, arriba) que hayan entrado <b>{money(order.total_amount)}</b> de {order.customer_name}{order.customer_dni ? ` (DNI ${order.customer_dni})` : ''}. Si llegó, tocá Confirmar pago. El stock ya está reservado.</div>}
+      {transferPaid && wa && <div className="mg-notice tone-new"><CheckCircle2 size={17} />Transferencia confirmada. Avisale al comprador: <a className="mg-wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(paidWhatsappText(order))}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Enviar WhatsApp de pago recibido</a></div>}
       {order.stock_shortage?.length > 0 && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Faltó stock al descontar {order.stock_shortage.length === 1 ? 'un producto' : `${order.stock_shortage.length} productos`}: {order.stock_shortage.map(s => `${s.barcode} (pedido ${s.requested}, había ${s.available})`).join(', ')}.</div>}
       {order.status_note && <div className="mg-notice"><StickyNote size={17} />Motivo registrado: {order.status_note}</div>}
 
       <section className="mg-ticket-block">
         <h3>Comprador</h3>
         <p className="mg-buyer-name">{order.customer_name}</p>
+        {order.customer_dni && <p className="mg-muted">DNI {order.customer_dni}</p>}
         <ul className="mg-contact">
           <li><Mail size={15} /><a href={`mailto:${order.customer_email}?subject=${encodeURIComponent(`Tu pedido ${order.order_number}`)}`}>{order.customer_email}</a></li>
           {order.customer_phone
@@ -195,17 +215,21 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><th scope="row" colSpan="3">Total</th><td className="mg-num">{money(order.total_amount)}</td></tr></tfoot>
+          <tfoot>
+            {Number(order.surcharge_amount) > 0 && <tr><th scope="row" colSpan="3">Recargo pago online</th><td className="mg-num">{money(order.surcharge_amount)}</td></tr>}
+            <tr><th scope="row" colSpan="3">Total</th><td className="mg-num">{money(order.total_amount)}</td></tr>
+          </tfoot>
         </table>
       </section>
 
       <section className="mg-ticket-block mg-ticket-pay">
         <h3>Pago</h3>
         <dl>
-          <div><dt>Medio</dt><dd>{cash ? <Banknote size={15} /> : <CreditCard size={15} />}{METHOD_LABEL[order.payment_method] || order.payment_method}</dd></div>
+          <div><dt>Medio</dt><dd>{cash ? <Banknote size={15} /> : transfer ? <Landmark size={15} /> : <CreditCard size={15} />}{METHOD_LABEL[order.payment_method] || order.payment_method}</dd></div>
           <div><dt>Estado</dt><dd className={order.payment_status === 'paid' ? 'is-ok' : order.payment_status === 'failed' ? 'is-bad' : ''}>{order.payment_status === 'paid' && <CheckCircle2 size={15} />}{cash && order.payment_status === 'pending' ? 'A cobrar al retirar' : PAYMENT_LABEL[order.payment_status] || order.payment_status}</dd></div>
           {order.paid_at && <div><dt>Pagado</dt><dd>{dateTime(order.paid_at)}</dd></div>}
           {order.mp_payment_id && <div><dt>Operación MP</dt><dd className="mg-code">{order.mp_payment_id}</dd></div>}
+          {Number(order.surcharge_amount) > 0 && <div><dt>Recargo</dt><dd>{money(order.surcharge_amount)} por pago online</dd></div>}
           <div><dt>Stock</dt><dd>{order.stock_restored_at ? 'Devuelto al inventario' : order.stock_applied_at ? 'Descontado del inventario' : order.payment_method === 'mercado_pago' ? 'Se descuenta cuando se confirma el pago' : 'Sin descontar'}</dd></div>
         </dl>
       </section>
@@ -248,6 +272,72 @@ function OrderTicket({ order, contactAvailable, pickupInfo, working, onAction, o
   );
 }
 
+const PAY_STATUS = { approved: 'Acreditado', pending: 'Pendiente', in_process: 'En proceso', rejected: 'Rechazado', cancelled: 'Cancelado', refunded: 'Devuelto', charged_back: 'Contracargo' };
+
+// Latest money that came in to the Mercado Pago account connected in the shop. Read-only:
+// it helps check a transfer without opening the app. Confirming the order is still a tap.
+function MpPaymentsPanel({ orders }) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState({ loading: false, error: '', data: null });
+  const load = async () => {
+    setState(current => ({ ...current, loading: true, error: '' }));
+    try {
+      const response = await fetch('/api/shop/mp-payments?days=7', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'No se pudieron consultar los cobros.');
+      setState({ loading: false, error: '', data });
+    } catch (error) { setState({ loading: false, error: error.message, data: null }); }
+  };
+  const toggle = () => { const next = !open; setOpen(next); if (next && !state.data) void load(); };
+  const pendingTransfers = orders.filter(order => order.payment_method === 'transferencia' && order.order_status === 'pending_review');
+  const matchFor = payment => {
+    if (payment.orderNumber) return `Pedido ${payment.orderNumber}`;
+    if (payment.status !== 'approved') return '';
+    const same = pendingTransfers.filter(order => Math.abs(Number(order.total_amount) - payment.amount) < 0.01);
+    return same.length ? `Mismo monto que ${same.map(order => `${order.order_number} (${order.customer_name})`).join(', ')}` : '';
+  };
+  const payments = state.data?.payments || [];
+  return (
+    <section className="mg-mp-payments">
+      <div className="mg-mp-payments-head">
+        <button type="button" className="mg-btn ghost" onClick={toggle} aria-expanded={open}><Wallet size={16} /> {open ? 'Ocultar últimos cobros' : 'Ver últimos cobros de Mercado Pago'}{pendingTransfers.length > 0 && <b className="mg-badge">{pendingTransfers.length} a verificar</b>}</button>
+        {open && <button type="button" className="mg-btn ghost" onClick={load} disabled={state.loading}>{state.loading ? <Loader2 size={16} className="mg-spin" /> : <RefreshCw size={16} />} Actualizar</button>}
+      </div>
+      {open && (
+        <div className="mg-mp-payments-body">
+          {state.error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{state.error}</div>}
+          {state.loading && !state.data && <p className="mg-muted"><Loader2 size={15} className="mg-spin" /> Consultando Mercado Pago…</p>}
+          {state.data && !state.data.connected && <p className="mg-muted">No hay una cuenta de Mercado Pago conectada en la tienda.</p>}
+          {state.data?.connected && (
+            <>
+              <p className="mg-muted">Cobros de los últimos {state.data.days} días en {state.data.sellerNickname || 'la cuenta conectada'}.</p>
+              {payments.length === 0 ? <p className="mg-muted">No entró ningún cobro en estos días.</p> : (
+                <table className="mg-mp-table">
+                  <thead><tr><th scope="col">Fecha</th><th scope="col">De</th><th scope="col">Tipo</th><th scope="col">Estado</th><th scope="col" className="mg-num">Monto</th></tr></thead>
+                  <tbody>
+                    {payments.map(payment => {
+                      const match = matchFor(payment);
+                      return (
+                        <tr key={payment.id} className={match && !payment.orderNumber ? 'is-match' : ''}>
+                          <td>{dateTime(payment.date)}</td>
+                          <td>{payment.payer || '—'}{payment.payerDni && <small>DNI/CUIT {payment.payerDni}</small>}{match && <small className="mg-mp-match">{match}</small>}</td>
+                          <td>{payment.kind}</td>
+                          <td>{PAY_STATUS[payment.status] || payment.status}</td>
+                          <td className="mg-num">{money(payment.amount)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function WebOrdersPage({ data, loading, error, onRefresh, onAction, working, notificationsEnabled, onEnableNotifications, selectedId, onSelect, lastLoaded }) {
   const [filter, setFilter] = useState('attention');
   const [term, setTerm] = useState('');
@@ -258,7 +348,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
   const visible = useMemo(() => {
     const test = FILTERS.find(([id]) => id === filter)?.[2] || (() => true);
     const query = term.trim().toLocaleLowerCase('es');
-    const list = orders.filter(order => test(order) && (!query || [order.order_number, order.customer_name, order.customer_email, order.customer_phone, order.pickup_point, ...pickupDates(order)].some(value => String(value || '').toLocaleLowerCase('es').includes(query))));
+    const list = orders.filter(order => test(order) && (!query || [order.order_number, order.customer_name, order.customer_email, order.customer_phone, order.customer_dni, order.pickup_point, ...pickupDates(order)].some(value => String(value || '').toLocaleLowerCase('es').includes(query))));
     // To attend: new ones first, then oldest first so nobody waits twice. Other views: newest first.
     return filter === 'attention' ? [...list].sort((a, b) => (a.order_status === 'pending_review' ? 0 : 1) - (b.order_status === 'pending_review' ? 0 : 1) || new Date(a.created_at) - new Date(b.created_at)) : list;
   }, [orders, filter, term]);
@@ -281,7 +371,10 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       {data?.available && !data.migrated && <div className="mg-notice tone-danger"><AlertTriangle size={17} />Falta correr la migración de pedidos en efectivo y stock en Supabase. Hasta entonces no se pueden aceptar ni cerrar pedidos desde acá.</div>}
       {data?.available && data.migrated && data.contact === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver el teléfono y la nota del comprador, corré en Supabase la migración 202611220003 de la tienda.</div>}
       {data?.available && data.contact && data.pickup === false && <div className="mg-notice"><AlertTriangle size={17} />Para ver si retiran en el local o en un punto de encuentro, y las 3 fechas que eligieron, corré en Supabase la migración 202611220004 de la tienda.</div>}
+      {data?.available && data.pickup && data.transfer === false && <div className="mg-notice"><AlertTriangle size={17} />Para recibir pagos por transferencia y ver el recargo online, corré en Supabase la migración 202611250001 de la tienda.</div>}
       {error && <div className="mg-notice tone-danger"><AlertTriangle size={17} />{error}</div>}
+
+      <MpPaymentsPanel orders={orders} />
 
       <div className="mg-toolbar">
         <div className="mg-tabs" role="tablist" aria-label="Filtrar pedidos">
@@ -296,7 +389,7 @@ export default function WebOrdersPage({ data, loading, error, onRefresh, onActio
       <div className={`mg-orders-split ${selected ? 'has-selection' : ''}`}>
         <div className="mg-order-list">
           {loading && !data && <div className="mg-empty"><Loader2 size={22} className="mg-spin" /><p>Cargando pedidos…</p></div>}
-          {data && visible.length === 0 && <div className="mg-empty"><ShoppingBag size={24} /><p>{term ? 'Ningún pedido coincide con la búsqueda.' : filter === 'attention' ? 'No hay pedidos en efectivo para confirmar. Cuando entre uno, suena un aviso.' : 'No hay pedidos en esta vista.'}</p></div>}
+          {data && visible.length === 0 && <div className="mg-empty"><ShoppingBag size={24} /><p>{term ? 'Ningún pedido coincide con la búsqueda.' : filter === 'attention' ? 'No hay pedidos en efectivo ni transferencias para confirmar. Cuando entre uno, suena un aviso.' : 'No hay pedidos en esta vista.'}</p></div>}
           {visible.map(order => <OrderRow key={order.id} order={order} selected={order.id === selectedId} onSelect={onSelect} now={now} />)}
         </div>
         <div className="mg-order-detail">

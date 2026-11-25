@@ -30,7 +30,7 @@ import {
 import { productBarcodes } from './catalog';
 import ThemePicker from './ThemePicker';
 import PhotosPage from './PhotosPage';
-import WebOrdersPage, { ORDER_LABEL, needsAttention, timeAgo } from './WebOrdersPage';
+import WebOrdersPage, { ORDER_LABEL, needsAttention, statusKey, timeAgo } from './WebOrdersPage';
 import './management.css';
 
 const LOW_STOCK = 5;
@@ -139,7 +139,7 @@ function Dashboard({ catalog, orders, onSection, onOpenOrder, onEdit }) {
             <li key={order.id}>
               <button type="button" onClick={() => onOpenOrder(order.id)}>
                 <span className={`mg-dot tone-${order.order_status === 'pending_review' || order.order_status === 'confirmed' ? 'new' : order.order_status === 'ready_for_pickup' ? 'ready' : 'work'}`} />
-                <span className="mg-hero-order-copy"><strong>{order.customer_name}</strong><small>{ORDER_LABEL[order.order_status]} · {order.pickup_point} · {timeAgo(order.created_at)}</small></span>
+                <span className="mg-hero-order-copy"><strong>{order.customer_name}</strong><small>{ORDER_LABEL[statusKey(order)]} · {order.pickup_point} · {timeAgo(order.created_at)}</small></span>
                 <b>{money(order.total_amount)}</b>
                 <ChevronRight size={16} />
               </button>
@@ -602,7 +602,7 @@ export default function ManagementApp({ theme = 'dark', onThemeChange = () => {}
     try {
       await request('/api/shop/web-orders', { method: 'POST', body: JSON.stringify({ orderId: order.id, action, note }) });
       await loadWebOrders();
-      const done = { accept: 'Pedido aceptado. Ya podés prepararlo.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado. El stock volvió al inventario.' }[action];
+      const done = { accept: 'Pedido aceptado. Ya podés prepararlo.', confirm_payment: 'Pago confirmado. El pedido pasó a Pagados; avisale por WhatsApp.', ready: 'Pedido marcado como listo para retirar.', deliver: 'Pedido entregado.', reject: 'Pedido cancelado. El stock volvió al inventario.' }[action];
       showToast(done);
       if (action === 'reject' || action === 'deliver') void syncInventory({ force: action === 'reject' });
     } catch (error) {
