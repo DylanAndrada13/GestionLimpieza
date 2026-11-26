@@ -63,6 +63,64 @@ const overlaps = (a, b) => {
   const right = productBarcodes(b).flatMap(equivalentBarcodes);
   return right.some(code => left.has(code));
 };
+const UNREGISTERED_KEY = 'cr-venta-sin-registrar';
+// A USB barcode gun types like a keyboard; on a computer the scan box keeps focus. On a phone it would pop the keyboard, so there the camera stays the default.
+const prefersUsbScanner = () => {
+  try { return window.matchMedia('(pointer: fine)').matches; } catch { return false; }
+};
+const isEditable = (element) => Boolean(element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)));
+const readUnregistered = () => {
+  try {
+    const rows = JSON.parse(localStorage.getItem(UNREGISTERED_KEY) || '[]');
+    return Array.isArray(rows) ? rows.filter(row => isBarcode(row?.barcode)).map(row => ({ barcode: String(row.barcode), qty: Math.max(1, Math.floor(Number(row.qty) || 1)), at: row.at || new Date().toISOString() })) : [];
+  } catch { return []; }
+};
+
+function ScanBar({ onCode, keepFocus }) {
+  const inputRef = useRef(null);
+  const [value, setValue] = useState('');
+  useEffect(() => {
+    if (!keepFocus) return undefined;
+    inputRef.current?.focus();
+    // After a click on + / - / quitar, focus goes back to the scan box so the next scan lands there.
+    const refocus = () => setTimeout(() => {
+      if (!inputRef.current || document.activeElement === inputRef.current) return;
+      if (isEditable(document.activeElement)) return;
+      inputRef.current.focus({ preventScroll: true });
+    }, 0);
+    document.addEventListener('focusin', refocus);
+    document.addEventListener('pointerup', refocus);
+    window.addEventListener('focus', refocus);
+    return () => {
+      document.removeEventListener('focusin', refocus);
+      document.removeEventListener('pointerup', refocus);
+      window.removeEventListener('focus', refocus);
+    };
+  }, [keepFocus]);
+  const submit = (event) => {
+    event.preventDefault();
+    const code = value.trim();
+    setValue('');
+    if (code) onCode(code);
+    inputRef.current?.focus();
+  };
+  return (
+    <form className="scan-bar" onSubmit={submit}>
+      <Barcode size={20} />
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={event => setValue(event.target.value.replace(/[^\d]/g, ''))}
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="Escaneá con el lector o escribí el código y Enter"
+        aria-label="Código de barras para agregar a la compra"
+      />
+      <button type="submit" disabled={!value.trim()}><Plus size={16} /> Agregar</button>
+    </form>
+  );
+}
+
 const cartUnits = (cart) => cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
 const cartAmount = (cart) => cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0);
 
@@ -595,23 +653,45 @@ function ProductScreen({
   );
 }
 
-function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFinalize, finalizing }) {
+function CartScreen({ cart, unregistered = [], total, onBack, onScan, onScanCode, keepScanFocus, onChangeQty, onRemove, onChangeUnregistered, onRemoveUnregistered, onRegister, onFinalize, finalizing }) {
   const units = cartUnits(cart);
+  const missing = unregistered.length;
+  const lines = cart.length + missing;
   return (
     <main className="app-body">
       <PageIntro
         title="Tu compra"
-        text={cart.length ? `${cart.length} producto${cart.length === 1 ? '' : 's'} · ${units} unidad${units === 1 ? '' : 'es'}` : 'Todavía no agregaste productos.'}
+        text={lines ? `${cart.length} producto${cart.length === 1 ? '' : 's'} · ${units} unidad${units === 1 ? '' : 'es'}${missing ? ` · ${missing} sin registrar` : ''}` : 'Todavía no agregaste productos.'}
         onBack={onBack}
-        action={<button type="button" className="header-action" onClick={onScan}><Camera size={16} /> Escanear</button>}
+        action={<button type="button" className="header-action" onClick={onScan}><Camera size={16} /> Cámara</button>}
       />
-      {cart.length === 0 ? (
-        <EmptyState icon={ShoppingCart} title="Tu compra está vacía" text="Escaneá un producto y agregalo para armar la compra.">
-          <button type="button" className="primary-cta" onClick={onScan}><Camera size={18} /> Escanear producto</button>
+      <ScanBar onCode={onScanCode} keepFocus={keepScanFocus} />
+      {lines === 0 ? (
+        <EmptyState icon={ShoppingCart} title="Tu compra está vacía" text="Escaneá un producto con el lector y se agrega solo. Si lo escaneás de nuevo, suma una unidad.">
+          <button type="button" className="primary-cta" onClick={onScan}><Camera size={18} /> Escanear con la cámara</button>
         </EmptyState>
       ) : (
         <>
           <div className="cart-list">
+            {unregistered.map(item => (
+              <article className="cart-item is-unregistered" key={`missing-${item.barcode}`}>
+                <span className="product-thumb cart unregistered-mark" aria-hidden="true"><Barcode size={22} /></span>
+                <div className="cart-copy">
+                  <strong><span className="unregistered-tag">Sin registrar</span> Código {item.barcode}</strong>
+                  <span>No está en el inventario. No se cobra hasta cargarlo.</span>
+                  <button type="button" className="register-link" onClick={() => onRegister(item.barcode)}><PackagePlus size={13} /> Cargar producto</button>
+                </div>
+                <div className="qty-control" aria-label={`Cantidad del código ${item.barcode}`}>
+                  <button type="button" onClick={() => onChangeUnregistered(item.barcode, -1)} aria-label="Restar uno"><Minus size={14} /></button>
+                  <span>{item.qty}</span>
+                  <button type="button" onClick={() => onChangeUnregistered(item.barcode, 1)} aria-label="Sumar uno"><Plus size={14} /></button>
+                </div>
+                <div className="cart-tail">
+                  <strong>$ —</strong>
+                  <button type="button" className="remove-button" onClick={() => onRemoveUnregistered(item.barcode)} aria-label={`Quitar el código ${item.barcode}`}><Trash2 size={16} /></button>
+                </div>
+              </article>
+            ))}
             {cart.map(item => (
               <article className="cart-item" key={item.barcode}>
                 <ProductThumb src={item.image} name={item.name} className="cart" iconSize={22} />
@@ -636,10 +716,11 @@ function CartScreen({ cart, total, onBack, onScan, onChangeQty, onRemove, onFina
           <section className="cart-summary">
             <div><span>Productos</span><strong>{cart.length}</strong></div>
             <div><span>Unidades</span><strong>{units}</strong></div>
+            {missing > 0 && <div className="cart-missing"><span>Sin registrar (no se cobran)</span><strong>{missing}</strong></div>}
             <div className="cart-total"><span>Total</span><strong>{money(total)}</strong></div>
             <FinalizeButton cart={cart} total={total} onFinalize={onFinalize} wide busy={finalizing} />
             <button type="button" className="secondary-cta compact" onClick={onScan}>
-              <Camera size={17} /> Seguir escaneando
+              <Camera size={17} /> Escanear con la cámara
             </button>
           </section>
         </>
@@ -1214,9 +1295,18 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
   const [zoomState, setZoomState] = useState({ supported: false, min: 1, max: 1, step: 0.1, value: 1 });
   const [scannerSession, setScannerSession] = useState(0);
   const [inventoryDraft, setInventoryDraft] = useState(null);
+  const [unregistered, setUnregistered] = useState(readUnregistered);
+  const unregisteredRef = useRef(unregistered);
   const cartRef = useRef([]);
   const cartMutationRef = useRef(Promise.resolve());
   const purchaseFinalizingRef = useRef(false);
+  const addToCartRef = useRef(null);
+  const updateUnregistered = useCallback((update) => {
+    const next = typeof update === 'function' ? update(unregisteredRef.current) : update;
+    unregisteredRef.current = next;
+    setUnregistered(next);
+    try { localStorage.setItem(UNREGISTERED_KEY, JSON.stringify(next)); } catch { }
+  }, []);
 
   const invalidateShopSession = useCallback(() => {
     setDatabaseStatus('locked');
@@ -1433,13 +1523,20 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     setScreen('scanner');
   }, []);
 
-  const continuePurchase = useCallback(() => {
-    openScanner('purchase', 'home');
+  const openSale = useCallback((returnScreen = 'home') => {
+    if (!prefersUsbScanner()) { openScanner('purchase', returnScreen); return; }
+    setBackScreen(returnScreen);
+    setScreen('cart');
+    setMenuOpen(false);
   }, [openScanner]);
+
+  const continuePurchase = useCallback(() => {
+    openSale('home');
+  }, [openSale]);
 
   const startNewPurchase = useCallback(async () => {
     if (!cartRef.current.length) {
-      openScanner('purchase', 'home');
+      openSale('home');
       return;
     }
     const units = cartUnits(cartRef.current);
@@ -1447,11 +1544,11 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     if (!confirmed) return;
     try {
       await commitCart([]);
-      openScanner('purchase', 'home');
+      openSale('home');
     } catch (error) {
       showToast(error.message || 'No se pudo iniciar una compra nueva.', 'error');
     }
-  }, [commitCart, openScanner, showToast]);
+  }, [commitCart, openSale, showToast]);
 
   const openProduct = useCallback((item, back = 'products') => {
     const code = item?.barcode || '';
@@ -1531,16 +1628,27 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       setMatches(prev => [saved, ...prev.filter(item => !overlaps(item, saved))]);
       setActiveBarcode(saved.barcode);
       setInventoryDraft(null);
+      if (origin === 'cart') {
+        setScreen('cart');
+        const pending = unregisteredRef.current.filter(row => equivalentBarcodes(row.barcode).some(code => productBarcodes(saved).includes(code)));
+        if (pending.length) {
+          updateUnregistered(prev => prev.filter(row => !pending.includes(row)));
+          addToCartRef.current?.(saved, pending.reduce((sum, row) => sum + row.qty, 0), { local: saved });
+        } else {
+          showToast('Producto guardado.');
+        }
+        return;
+      }
       setScreen(origin === 'product' ? 'product' : 'products');
       showToast(origin === 'product' ? 'Producto guardado. Ya podés agregarlo a la compra.' : 'Producto guardado.');
     } catch (error) {
       showToast(error.message || 'No se pudo guardar el producto. Probá de nuevo.', 'error');
       throw error;
     }
-  }, [inventoryDraft, requestShop, showToast]);
+  }, [inventoryDraft, requestShop, showToast, updateUnregistered]);
 
-  const addToCart = useCallback((item, qty = 1) => {
-    const local = findLocalProduct(catalog, item?.barcode || activeBarcode);
+  const addToCart = useCallback((item, qty = 1, options = {}) => {
+    const local = options.local || findLocalProduct(catalog, item?.barcode || activeBarcode);
     if (!local) {
       showToast('Primero cargá el producto en el inventario para poder venderlo.', 'error');
       return;
@@ -1572,7 +1680,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     };
     void commitCart(prev => {
       const found = prev.find(row => overlaps(row, local));
-      if (found) return prev.map(row => overlaps(row, local) ? { ...row, name: local.name, price: Number(local.price) || 0, stock, qty: found.qty + amount } : row);
+      if (found) return prev.map(row => overlaps(row, local) ? { ...row, name: local.name, price: Number(local.price) || 0, stock, qty: Math.min(stock, found.qty + amount) } : row);
       return [...prev, row];
     }).then(() => {
       showToast({
@@ -1585,6 +1693,42 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       try { navigator.vibrate?.(35); } catch { }
     }).catch(error => showToast(error.message || 'No se pudo guardar la compra en curso.', 'error'));
   }, [activeBarcode, catalog, commitCart, showToast]);
+  addToCartRef.current = addToCart;
+
+  // One scan from the USB reader (or a code typed + Enter): straight into the sale, no buttons.
+  const scanIntoSale = useCallback((rawValue) => {
+    const code = tidy(rawValue).replace(/\s/g, '');
+    if (!isBarcode(code)) {
+      showToast(`El código “${code.slice(0, 20)}” no es válido. Tiene que tener de 8 a 14 números.`, 'error');
+      return;
+    }
+    const local = findLocalProduct(catalog, code);
+    if (local) {
+      addToCart(local, 1, { local });
+      return;
+    }
+    updateUnregistered(prev => {
+      const found = prev.find(row => equivalentBarcodes(code).includes(row.barcode));
+      if (found) return prev.map(row => row === found ? { ...row, qty: row.qty + 1 } : row);
+      return [{ barcode: code, qty: 1, at: new Date().toISOString() }, ...prev];
+    });
+    void addHistory({ barcode: code, at: new Date().toISOString(), found: false, name: '' });
+    showToast(`Código ${code} sin registrar. Quedó en la lista en rojo.`, 'error');
+    try { navigator.vibrate?.([40, 60, 40]); } catch { }
+  }, [addHistory, addToCart, catalog, showToast, updateUnregistered]);
+
+  const changeUnregistered = useCallback((barcode, delta) => {
+    updateUnregistered(prev => prev.flatMap(row => {
+      if (row.barcode !== barcode) return [row];
+      const qty = row.qty + delta;
+      return qty <= 0 ? [] : [{ ...row, qty }];
+    }));
+  }, [updateUnregistered]);
+
+  const registerUnregistered = useCallback((barcode) => {
+    setBackScreen('cart');
+    openInventoryForm(null, { barcode, origin: 'cart' });
+  }, [openInventoryForm]);
 
   const changeQty = useCallback((barcode, delta) => {
     const item = cartRef.current.find(row => equivalentBarcodes(barcode).some(code => productBarcodes(row).includes(code)));
@@ -1623,6 +1767,8 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       await cartMutationRef.current;
       const items = cartRef.current;
       if (!items.length) return;
+      const missing = unregisteredRef.current.length;
+      if (missing && !window.confirm(`Hay ${missing} código${missing === 1 ? '' : 's'} sin registrar en la lista. No se van a cobrar ni a descontar.\n\n¿Registrar la venta igual?`)) return;
       const { purchase } = await requestShop('/api/shop/purchases', {
         method: 'POST',
         body: JSON.stringify({ items }),
@@ -1639,6 +1785,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       }));
       cartRef.current = [];
       setCart([]);
+      updateUnregistered([]);
       setScreen('purchases');
       setMenuOpen(false);
       showToast({
@@ -1657,7 +1804,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
       purchaseFinalizingRef.current = false;
       setPurchaseFinalizing(false);
     }
-  }, [requestShop, showToast]);
+  }, [requestShop, showToast, updateUnregistered]);
 
   const resetInventory = useCallback(async () => {
     try {
@@ -1812,6 +1959,36 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     return () => { active = false; };
   }, [databaseStatus, historyLoaded, requestShop, showToast]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+  const scanIntoSaleRef = useRef(scanIntoSale);
+  scanIntoSaleRef.current = scanIntoSale;
+  useEffect(() => {
+    // The reader types digits a few ms apart and ends with Enter. Outside a text box, a fast burst like that is a scan:
+    // it goes to the sale and opens it. Slow typing is ignored so normal keys keep working.
+    if (databaseStatus !== 'ready' || ['scanner', 'inventory-form'].includes(screen)) return undefined;
+    let buffer = '';
+    let last = 0;
+    const onKey = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || isEditable(event.target)) return;
+      const now = Date.now();
+      if (now - last > 80) buffer = '';
+      last = now;
+      if (/^\d$/.test(event.key)) { buffer += event.key; return; }
+      if (event.key === 'Enter' && isBarcode(buffer)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const code = buffer;
+        buffer = '';
+        if (screen !== 'cart') {
+          setBackScreen(screen);
+          setScreen('cart');
+          setMenuOpen(false);
+        }
+        scanIntoSaleRef.current(code);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [databaseStatus, screen]);
   useEffect(() => { document.title = 'CR Perfumería · Venta'; }, []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
   const install = useCallback(async () => {
@@ -2015,11 +2192,17 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
           {screen === 'cart' && (
             <CartScreen
               cart={cart}
+              unregistered={unregistered}
               total={cartTotal}
               onBack={goBack}
               onScan={() => openScanner('purchase', 'cart')}
+              onScanCode={scanIntoSale}
+              keepScanFocus={prefersUsbScanner()}
               onChangeQty={changeQty}
               onRemove={removeFromCart}
+              onChangeUnregistered={changeUnregistered}
+              onRemoveUnregistered={(barcode) => changeUnregistered(barcode, -Infinity)}
+              onRegister={registerUnregistered}
               onFinalize={finalizePurchase}
               finalizing={purchaseFinalizing}
             />

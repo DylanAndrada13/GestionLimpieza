@@ -1916,3 +1916,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   body { background: radial-gradient(900px 600px at 50% 0%, #211b10 0%, transparent 65%), #080807; }
   .app-shell { box-shadow: 0 32px 90px rgba(0, 0, 0, .68); border: 1px solid rgba(218, 174, 76, .2); }
 }
+
+/* ------------------------------------------------------------------ */
+/* Lector USB: escaneo directo a la compra                             */
+/* ------------------------------------------------------------------ */
+
+.scan-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding: 7px 7px 7px 13px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(218, 174, 76, .45);
+  background: #191714;
+  color: #e0b84e;
+}
+.scan-bar:focus-within { border-color: #e0b84e; box-shadow: 0 0 0 3px rgba(224, 184, 78, .18); }
+.scan-bar input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 15px; letter-spacing: .02em; }
+.scan-bar input::placeholder { color: #8f877a; font-size: 12.5px; letter-spacing: 0; }
+.scan-bar button { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: #a87d2c; color: #100e0a; font-size: 12px; font-weight: 600; cursor: pointer; }
+.scan-bar button:disabled { opacity: .45; cursor: default; }
+
+.cart-item.is-unregistered,
+.app-shell.theme-light .cart-item.is-unregistered {
+  border: 1.5px solid rgba(242, 85, 93, .75);
+  background: rgba(242, 85, 93, .1);
+}
+.cart-item.is-unregistered .cart-copy span { white-space: normal; color: #f08a8f; }
+.cart-item.is-unregistered .cart-tail > strong { color: #f2555d; }
+.unregistered-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: rgba(242, 85, 93, .18) !important; color: #f2555d !important; }
+.cart-item.is-unregistered .cart-copy .unregistered-tag { display: inline-block; margin-right: 4px; padding: 1px 6px; border-radius: 6px; background: #e03e47; color: #fff; font-size: 10px; font-weight: 700; white-space: nowrap; overflow: visible; text-transform: uppercase; letter-spacing: .04em; vertical-align: 1px; }
+.register-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; padding: 0; border: 0; background: transparent; color: #f2555d; font-size: 11px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.cart-summary .cart-missing span, .cart-summary .cart-missing strong { color: #f2555d; }
+
+.app-shell.theme-light .scan-bar { background: #fffdf8; border-color: rgba(145, 113, 51, .35); color: #8a6519; }
+.app-shell.theme-light .scan-bar:focus-within { border-color: #c59c45; box-shadow: 0 0 0 3px rgba(197, 156, 69, .2); }
+.app-shell.theme-light .scan-bar button { background: #c59c45; color: #201806; }
+.app-shell.theme-light .cart-item.is-unregistered .cart-copy span { color: #c2363d; }
