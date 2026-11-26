@@ -1187,8 +1187,17 @@ function ScannerScreen({
   onZoom,
   onClose,
   onManual,
+  mode = 'purchase',
+  cart = [],
+  unregistered = [],
+  total = 0,
+  finalizing = false,
+  onFinalize,
+  onCancel,
 }) {
   const [manualOpen, setManualOpen] = useState(Boolean(cameraError));
+  const sale = mode === 'purchase';
+  const units = cartUnits(cart);
   const [manualCode, setManualCode] = useState('');
 
   useEffect(() => {
@@ -1199,6 +1208,7 @@ function ScannerScreen({
     event.preventDefault();
     if (!isBarcode(manualCode)) return;
     onManual(manualCode);
+    if (sale) setManualCode('');
   };
 
   return (
@@ -1207,8 +1217,8 @@ function ScannerScreen({
       <div className="scanner-shade" />
       <header className="scanner-top">
         <div>
-          <strong>Escanear producto</strong>
-          <span>{cameraError ? 'Usá el código manual' : 'Enfocá el código de barras'}</span>
+          <strong>{sale ? 'Compra en curso' : 'Escanear producto'}</strong>
+          <span>{cameraError ? 'Usá el código manual' : sale ? 'Escaneá un producto tras otro: se agregan solos' : 'Enfocá el código de barras'}</span>
         </div>
         <button type="button" className="scanner-close" onClick={onClose} aria-label="Cerrar cámara"><X size={21} /></button>
       </header>
@@ -1230,13 +1240,37 @@ function ScannerScreen({
             <div><strong>No se pudo abrir la cámara</strong><p>{cameraError}</p></div>
           </div>
         )}
-        <div className="scanner-panel-head">
+        {sale && (
+          <div className="sale-sheet">
+            <div className="sale-sheet-head">
+              <strong>{cart.length || unregistered.length ? `${units} unidad${units === 1 ? '' : 'es'} en la compra` : 'Todavía no escaneaste productos'}</strong>
+              <b>{money(total)}</b>
+            </div>
+            {(cart.length > 0 || unregistered.length > 0) && (
+              <ul className="sale-sheet-list">
+                {unregistered.map(item => (
+                  <li key={`missing-${item.barcode}`} className="is-unregistered"><span>{item.qty}×</span><em>Sin registrar · {item.barcode}</em><b>$ —</b></li>
+                ))}
+                {[...cart].reverse().map(item => (
+                  <li key={item.barcode}><span>{item.qty}×</span><em>{item.name || 'Producto'}</em><b>{priceLabel(item.price * item.qty)}</b></li>
+                ))}
+              </ul>
+            )}
+            <div className="sale-sheet-actions">
+              <button type="button" className="sale-cancel" onClick={onCancel} disabled={finalizing}><X size={16} /> Cancelar</button>
+              <button type="button" className="sale-finish" onClick={onFinalize} disabled={!cart.length || finalizing}>
+                {finalizing ? <Loader2 size={16} className="spin" /> : <Check size={16} />} Finalizar compra
+              </button>
+            </div>
+          </div>
+        )}
+        {!sale && <div className="scanner-panel-head">
           <div>
             <strong>{cameraError ? 'Ingresá el código manualmente' : '¿No lee el código?'}</strong>
             <span>{cameraError ? 'Escribí el número que figura debajo del código de barras.' : 'Podés ingresarlo a mano.'}</span>
           </div>
           <span className="live-pill"><i /> EN VIVO</span>
-        </div>
+        </div>}
 
         {zoomState.supported && (
           <label className="scan-zoom">
@@ -1250,10 +1284,10 @@ function ScannerScreen({
         ) : (
           <form className="manual-form" onSubmit={submitManual}>
             <input value={manualCode} onChange={event => setManualCode(event.target.value)} inputMode="numeric" placeholder="Ej. 7791290792098" aria-label="Código de barras" autoFocus={Boolean(cameraError)} />
-            <button type="submit" disabled={!isBarcode(manualCode)}><Search size={17} /> Buscar</button>
+            <button type="submit" disabled={!isBarcode(manualCode)}>{sale ? <><Plus size={17} /> Agregar</> : <><Search size={17} /> Buscar</>}</button>
           </form>
         )}
-        <p className="scanner-safe"><ShieldCheck size={14} /> La cámara no guarda fotos</p>
+        {!sale && <p className="scanner-safe"><ShieldCheck size={14} /> La cámara no guarda fotos</p>}
       </div>
     </div>
   );
@@ -1418,6 +1452,8 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
   const handledRef = useRef(false);
   const lookupTokenRef = useRef(0);
   const scannerCodeRef = useRef(null);
+  const scannerModeRef = useRef('purchase');
+  const lastCameraReadRef = useRef({ code: '', at: 0 });
   const toastTimerRef = useRef(null);
 
   const localProduct = useMemo(() => findLocalProduct(catalog, activeBarcode), [catalog, activeBarcode]);
@@ -1590,7 +1626,6 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
         showToast('Ingresá un código de barras de 8 a 14 números.', 'error');
         return false;
       }
-      setScreen('cart');
       scanIntoSaleRef.current?.(scanned);
       return true;
     }
@@ -1629,6 +1664,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     return true;
   }, [addHistory, backScreen, catalog, openInventoryForm, scanLookup, scannerMode, showToast]);
   scannerCodeRef.current = handleScannerCode;
+  scannerModeRef.current = scannerMode;
 
   const saveInventory = useCallback(async (entry) => {
     const origin = inventoryDraft?.origin || 'products';
@@ -1817,6 +1853,21 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     }
   }, [requestShop, showToast, updateUnregistered]);
 
+  const cancelSale = useCallback(async () => {
+    const units = cartUnits(cartRef.current);
+    const missing = unregisteredRef.current.length;
+    if ((units || missing) && !window.confirm('¿Cancelar la compra? Se vacía el carrito y no se registra nada.')) return;
+    try {
+      await commitCart([]);
+      updateUnregistered([]);
+      setScreen('home');
+      setBackScreen('home');
+      showToast('Compra cancelada.');
+    } catch (error) {
+      showToast(error.message || 'No se pudo cancelar la compra.', 'error');
+    }
+  }, [commitCart, showToast, updateUnregistered]);
+
   const resetInventory = useCallback(async () => {
     try {
       await requestShop('/api/shop/products', { method: 'DELETE' });
@@ -1987,8 +2038,8 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
         event.stopPropagation();
         const code = buffer;
         buffer = '';
-        if (screen !== 'cart') {
-          if (screen !== 'scanner') setBackScreen(screen);
+        if (screen !== 'cart' && screen !== 'scanner') {
+          setBackScreen(screen);
           setScreen('cart');
           setMenuOpen(false);
         }
@@ -2060,6 +2111,19 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
           if (!result || handledRef.current) return;
           const code = result.getText();
           if (!code) return;
+          if (scannerModeRef.current !== 'stock') {
+            // Sale: the camera stays open. The same code is read many times per second while it is in view,
+            // so it counts again only after a pause; a different code needs a short gap.
+            const now = Date.now();
+            const last = lastCameraReadRef.current;
+            if ((code === last.code && now - last.at < 2500) || now - last.at < 700) {
+              if (code === last.code) lastCameraReadRef.current = { code, at: now };
+              return;
+            }
+            lastCameraReadRef.current = { code, at: now };
+            scannerCodeRef.current(code);
+            return;
+          }
           handledRef.current = true;
           stopCameraStream();
           scannerCodeRef.current(code);
@@ -2177,6 +2241,13 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
           onZoom={changeZoom}
           onClose={() => setScreen(backScreen || 'home')}
           onManual={handleScannerCode}
+          mode={scannerMode}
+          cart={cart}
+          unregistered={unregistered}
+          total={cartTotal}
+          finalizing={purchaseFinalizing}
+          onFinalize={finalizePurchase}
+          onCancel={cancelSale}
         />
       )}
 
