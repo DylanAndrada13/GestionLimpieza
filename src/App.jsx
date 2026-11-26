@@ -113,10 +113,10 @@ function ScanBar({ onCode, keepFocus }) {
         onChange={event => setValue(event.target.value.replace(/[^\d]/g, ''))}
         inputMode="numeric"
         autoComplete="off"
-        placeholder="Escaneá con el lector o escribí el código y Enter"
+        placeholder="Escaneá con el lector"
         aria-label="Código de barras para agregar a la compra"
       />
-      <button type="submit" disabled={!value.trim()}><Plus size={16} /> Agregar</button>
+      <span className="scan-bar-hint">Se agrega solo</span>
     </form>
   );
 }
@@ -1301,6 +1301,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
   const cartMutationRef = useRef(Promise.resolve());
   const purchaseFinalizingRef = useRef(false);
   const addToCartRef = useRef(null);
+  const scanIntoSaleRef = useRef(null);
   const updateUnregistered = useCallback((update) => {
     const next = typeof update === 'function' ? update(unregisteredRef.current) : update;
     unregisteredRef.current = next;
@@ -1583,7 +1584,16 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
   }, [activeBarcode, catalog]);
 
   const handleScannerCode = useCallback(async (rawValue) => {
-    if (scannerMode !== 'stock') return scanLookup(rawValue, { back: backScreen || 'home' });
+    if (scannerMode !== 'stock') {
+      const scanned = tidy(rawValue).replace(/\s/g, '');
+      if (!isBarcode(scanned)) {
+        showToast('Ingresá un código de barras de 8 a 14 números.', 'error');
+        return false;
+      }
+      setScreen('cart');
+      scanIntoSaleRef.current?.(scanned);
+      return true;
+    }
     const code = tidy(rawValue).replace(/\s/g, '');
     if (!isBarcode(code)) {
       showToast('Ingresá un código de barras de 8 a 14 números.', 'error');
@@ -1716,6 +1726,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     showToast(`Código ${code} sin registrar. Quedó en la lista en rojo.`, 'error');
     try { navigator.vibrate?.([40, 60, 40]); } catch { }
   }, [addHistory, addToCart, catalog, showToast, updateUnregistered]);
+  scanIntoSaleRef.current = scanIntoSale;
 
   const changeUnregistered = useCallback((barcode, delta) => {
     updateUnregistered(prev => prev.flatMap(row => {
@@ -1959,12 +1970,10 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     return () => { active = false; };
   }, [databaseStatus, historyLoaded, requestShop, showToast]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
-  const scanIntoSaleRef = useRef(scanIntoSale);
-  scanIntoSaleRef.current = scanIntoSale;
   useEffect(() => {
     // The reader types digits a few ms apart and ends with Enter. Outside a text box, a fast burst like that is a scan:
     // it goes to the sale and opens it. Slow typing is ignored so normal keys keep working.
-    if (databaseStatus !== 'ready' || ['scanner', 'inventory-form'].includes(screen)) return undefined;
+    if (databaseStatus !== 'ready' || screen === 'inventory-form' || (screen === 'scanner' && scannerMode === 'stock')) return undefined;
     let buffer = '';
     let last = 0;
     const onKey = (event) => {
@@ -1979,7 +1988,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
         const code = buffer;
         buffer = '';
         if (screen !== 'cart') {
-          setBackScreen(screen);
+          if (screen !== 'scanner') setBackScreen(screen);
           setScreen('cart');
           setMenuOpen(false);
         }
@@ -1988,7 +1997,7 @@ export default function App({ theme = 'dark', onThemeChange = () => {}, onExit =
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [databaseStatus, screen]);
+  }, [databaseStatus, screen, scannerMode]);
   useEffect(() => { document.title = 'CR Perfumería · Venta'; }, []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [screen]);
   const install = useCallback(async () => {

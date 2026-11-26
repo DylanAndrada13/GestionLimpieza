@@ -1954,3 +1954,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .app-shell.theme-light .scan-bar:focus-within { border-color: #c59c45; box-shadow: 0 0 0 3px rgba(197, 156, 69, .2); }
 .app-shell.theme-light .scan-bar button { background: #c59c45; color: #201806; }
 .app-shell.theme-light .cart-item.is-unregistered .cart-copy span { color: #c2363d; }
+.scan-bar-hint { flex: none; padding: 6px 10px; border-radius: 9px; background: rgba(224, 184, 78, .14); color: #e0b84e; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.app-shell.theme-light .scan-bar-hint { background: #f3ead4; color: #765612; }
